@@ -1,0 +1,215 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-white/10;
+  }
+
+  body {
+    @apply min-h-screen bg-ink font-sans text-white antialiased;
+  }
+
+  button,
+  input,
+  select {
+    @apply outline-none;
+  }
+
+  button {
+    min-height: 44px;
+  }
+}
+
+@layer components {
+  .field-control {
+    @apply border-b-2 border-b-transparent transition-[border-color,box-shadow] duration-200 focus:border-b-accent focus:ring-1 focus:ring-accent/20;
+  }
+
+  .sheet-backdrop {
+    background-color: rgba(0, 0, 0, 0.6);
+    animation: backdrop-in 300ms ease both;
+  }
+
+  .sheet-backdrop-closing {
+    animation: backdrop-out 300ms ease both;
+  }
+
+  .bottom-sheet {
+    animation: sheet-in 400ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    transition: transform 400ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .bottom-sheet-closing {
+    animation: sheet-out 400ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .status-badge {
+    transition: background-color 200ms ease, color 200ms ease, transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .status-badge-label {
+    transition: opacity 175ms ease;
+    transition-delay: 50ms;
+  }
+}
+
+@keyframes sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes sheet-out {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes field-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, 14px); }
+}
+
+@keyframes delete-done {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes booking-remove {
+  from { max-height: 180px; opacity: 1; transform: translateY(0); }
+  to { max-height: 0; opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes status-toggle {
+  0% { transform: scale(1); }
+  28.57% { transform: scale(0.85); }
+  71.43% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes revenue-pulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes number-exit-up {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-16px); }
+}
+
+@keyframes number-enter-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes number-exit-down {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(16px); }
+}
+
+@keyframes number-enter-down {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes screen-enter-right {
+  from { opacity: 0; transform: translateX(30px) scale(1); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes screen-enter-left {
+  from { opacity: 0; transform: translateX(-30px) scale(1); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes screen-enter-right-pop {
+  from { opacity: 0; transform: translateX(30px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes screen-enter-left-pop {
+  from { opacity: 0; transform: translateX(-30px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes screen-exit-left {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-30px); }
+}
+
+@keyframes screen-exit-right {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(30px); }
+}
+
+@keyframes expense-entry {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes expense-row-remove {
+  0% {
+    background-color: rgba(239, 68, 68, 0.15);
+    height: 72px;
+    min-height: 44px;
+    opacity: 1;
+    padding: 0 1rem;
+  }
+  33.33% {
+    background-color: rgba(239, 68, 68, 0.15);
+    height: 72px;
+    min-height: 44px;
+    opacity: 1;
+    padding: 0 1rem;
+  }
+  100% {
+    background-color: rgba(239, 68, 68, 0);
+    height: 0;
+    min-height: 0;
+    opacity: 0;
+    padding: 0;
+  }
+}
+
+.animate-field-shake { animation: field-shake 200ms ease; }
+.animate-toast-in { animation: toast-in 250ms ease both; }
+.animate-toast-out { animation: toast-out 300ms ease both; }
+.animate-delete-done { animation: delete-done 200ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.booking-card-removing { animation: booking-remove 350ms ease-in-out both; }
+.animate-status-toggle { animation: status-toggle 350ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-revenue-pulse { animation: revenue-pulse 200ms ease; }
+.animate-number-exit-up { animation: number-exit-up 120ms ease-in both; }
+.animate-number-enter-up { animation: number-enter-up 200ms ease-out both; }
+.animate-number-exit-down { animation: number-exit-down 120ms ease-in both; }
+.animate-number-enter-down { animation: number-enter-down 200ms ease-out both; }
+.animate-screen-enter-right { animation: screen-enter-right 220ms ease-out both; }
+.animate-screen-enter-left { animation: screen-enter-left 220ms ease-out both; }
+.animate-screen-enter-right-pop { animation: screen-enter-right-pop 180ms ease-out both; }
+.animate-screen-enter-left-pop { animation: screen-enter-left-pop 180ms ease-out both; }
+.animate-screen-exit-left { animation: screen-exit-left 150ms ease-in both; }
+.animate-screen-exit-right { animation: screen-exit-right 150ms ease-in both; }
+.animate-expense-entry { animation: expense-entry 250ms ease-out both; }
+.expense-row-removing { animation: expense-row-remove 450ms ease-in-out both; overflow: hidden; pointer-events: none; }
