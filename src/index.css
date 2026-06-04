@@ -194,6 +194,11 @@
   }
 }
 
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
 .animate-field-shake { animation: field-shake 200ms ease; }
 .animate-toast-in { animation: toast-in 250ms ease both; }
 .animate-toast-out { animation: toast-out 300ms ease both; }
@@ -213,3 +218,8 @@
 .animate-screen-exit-right { animation: screen-exit-right 150ms ease-in both; }
 .animate-expense-entry { animation: expense-entry 250ms ease-out both; }
 .expense-row-removing { animation: expense-row-remove 450ms ease-in-out both; overflow: hidden; pointer-events: none; }
+.skeleton-shimmer {
+  background-image: linear-gradient(90deg, #2A2A2A 0%, #343434 45%, #2A2A2A 90%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.25s ease-in-out infinite;
+}

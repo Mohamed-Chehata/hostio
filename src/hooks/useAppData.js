@@ -206,6 +206,8 @@ export function useAppData(user, months = []) {
   }, [fetchMonths]);
 
   const bookings = useMemo(() => Object.values(bookingsByMonth).flat(), [bookingsByMonth]);
+  const monthlyCosts = useMemo(() => Object.values(costsByMonth), [costsByMonth]);
+  const expenses = useMemo(() => Object.values(expensesByMonth).flat(), [expensesByMonth]);
   const monthlyStats = useMemo(() => loadedMonths.map((month) => buildSummary(month, bookingsByMonth[month] || [], costsByMonth[month], expensesByMonth[month] || [])), [bookingsByMonth, costsByMonth, expensesByMonth, loadedMonths]);
 
   async function fetchStatsMonths() {
@@ -266,6 +268,10 @@ export function useAppData(user, months = []) {
   }
 
   async function updateBooking(booking) {
+    return saveBooking(booking);
+  }
+
+  async function addBooking(booking) {
     return saveBooking(booking);
   }
 
@@ -395,6 +401,13 @@ export function useAppData(user, months = []) {
     }
   }
 
+  async function updateProperty(id, updates) {
+    const name = typeof updates === "string" ? updates : updates?.name;
+    if (!name) return null;
+    await renameProperty(id, name);
+    return properties.find((property) => property.id === id) || null;
+  }
+
   async function deleteProperty(id) {
     if (properties.length <= 1) {
       reportError(new Error("You need at least one property"));
@@ -430,6 +443,8 @@ export function useAppData(user, months = []) {
     activePropertyId,
     setActivePropertyId,
     userSettings,
+    monthlyCosts,
+    expenses,
     costLabels,
     bookings,
     bookingsByMonth,
@@ -443,9 +458,11 @@ export function useAppData(user, months = []) {
     fetchMonths,
     addProperty,
     renameProperty,
+    updateProperty,
     deleteProperty,
     updateUserSettings,
     fetchStatsMonths,
+    addBooking,
     saveBooking,
     updateBooking,
     deleteBooking,

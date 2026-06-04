@@ -66,7 +66,7 @@ export default function App() {
   }
 
   function saveBooking(booking) {
-    data.saveBooking(booking);
+    data.addBooking(booking);
     setSelectedMonth(booking.checkIn.slice(0, 7));
     setEditingSheet(null);
     if (screen === "add") navigate("bookings");
@@ -159,7 +159,7 @@ export default function App() {
 
   function renderTabScreen(tabName) {
     if (tabName === "dashboard") return <DashboardScreen onNavigate={navigate} onSignOut={auth.signOut} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onEditCosts={() => setCostsOpen(true)} onEditBooking={openEditor} onRequestDelete={requestDelete} onToggleStatus={toggleBookingStatus} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} onFirstSwipe={recordFirstSwipe} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={data.bookings} costLabels={data.costLabels} formatCurrency={app.formatCurrency} />;
-    if (tabName === "bookings") return <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} bookings={data.bookings} formatCurrency={app.formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onToggleStatus={toggleBookingStatus} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} onFirstSwipe={recordFirstSwipe} hasSeenSwipeHint={hasSeenSwipeHint} deletionStages={deletionStages} />;
+    if (tabName === "bookings") return <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} bookings={data.bookings} isLoading={data.isLoading} formatCurrency={app.formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onToggleStatus={toggleBookingStatus} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} onFirstSwipe={recordFirstSwipe} hasSeenSwipeHint={hasSeenSwipeHint} deletionStages={deletionStages} />;
     if (tabName === "add") return <AddBookingScreen currency={app.currency} onSave={saveBooking} />;
     if (tabName === "expenses") return <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} currency={app.currency} costLabels={data.costLabels} formatCurrency={app.formatCurrency} onUpdateCostLabel={(field, label) => data.updateUserSettings(field === "rent" ? { cost_label_1: label } : { cost_label_2: label })} onUpdateFixedCost={data.addFixedCost} onAddExpense={data.addExpense} onUpdateExpense={data.updateExpense} onDeleteExpense={data.deleteExpense} />;
     if (tabName === "stats") return <StatsScreen stats={data.statsMonths.length ? data.statsMonths : data.monthlyStats} activePropertyName={data.activeProperty?.name || "My Property"} formatCurrency={app.formatCurrency} />;

@@ -8,7 +8,7 @@ function moveMonth(month, amount) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", bookings, formatCurrency, onSelect, onRequestDelete, onToggleStatus, openSwipeId, onOpenSwipe, onCloseSwipe, onFirstSwipe, hasSeenSwipeHint, deletionStages }) {
+export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", bookings, isLoading = false, formatCurrency, onSelect, onRequestDelete, onToggleStatus, openSwipeId, onOpenSwipe, onCloseSwipe, onFirstSwipe, hasSeenSwipeHint, deletionStages }) {
   const visible = bookings.filter((booking) => monthKey(booking.checkIn) === month).sort((a, b) => a.checkIn.localeCompare(b.checkIn));
 
   return (
@@ -22,7 +22,11 @@ export function BookingsScreen({ month, setMonth, activePropertyName = "My Prope
         <button aria-label="Next month" onClick={() => setMonth(moveMonth(month, 1))} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 text-muted"><ChevronRight size={18} /></button>
       </div>
 
-      {visible.length ? (
+      {isLoading ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((item) => <BookingCardSkeleton key={item} />)}
+        </div>
+      ) : visible.length ? (
         <>
           <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">{visible.length} reservations</p>
           <div className="space-y-2">{visible.map((booking, index) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} onClick={() => onSelect(booking)} onRequestDelete={onRequestDelete} onToggleStatus={onToggleStatus} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} onFirstSwipe={onFirstSwipe} teachSwipe={index === 0 && !hasSeenSwipeHint} deletionStage={deletionStages[booking.id]} />)}</div>
@@ -35,5 +39,13 @@ export function BookingsScreen({ month, setMonth, activePropertyName = "My Prope
         </div>
       )}
     </main>
+  );
+}
+
+function BookingCardSkeleton() {
+  return (
+    <div className="h-[118px] rounded-2xl bg-[#2A2A2A] p-4">
+      <div className="skeleton-shimmer h-full rounded-xl" />
+    </div>
   );
 }
