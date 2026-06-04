@@ -1,8 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+
+const PENDING_SIGNUP_KEY = "hostioPendingSignup";
+const PASSWORD_RECOVERY_KEY = "hostioPasswordRecovery";
+const VERIFIED_EVENT = "hostio:email-verified";
+const PASSWORD_RECOVERY_EVENT = "hostio:password-recovery";
 
 function logError(error) {
   if (import.meta.env.DEV) console.error(error?.message || error);
+}
+
+function readPendingSignup() {
+  try {
+    const value = localStorage.getItem(PENDING_SIGNUP_KEY);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingSignup(email, propertyName) {
+  localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ email, propertyName }));
+}
+
+function clearPendingSignup() {
+  localStorage.removeItem(PENDING_SIGNUP_KEY);
+}
+
+function getPendingSignupForUser(user) {
+  const pending = readPendingSignup();
+  if (!pending?.email || pending.email.toLowerCase() !== user.email?.toLowerCase()) return null;
+  return pending;
+}
+
+function notifyEmailVerified(propertyName) {
+  window.dispatchEvent(new CustomEvent(VERIFIED_EVENT, { detail: { propertyName } }));
+}
+
+function notifyPasswordRecovery() {
+  window.dispatchEvent(new CustomEvent(PASSWORD_RECOVERY_EVENT));
 }
 
 export async function initNewUser(userId, propertyName = "My Property") {
@@ -48,15 +84,56 @@ export function useAuth() {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const revealSessionTimer = useRef(null);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data, error }) => {
+    async function revealVerifiedSession(nextSession, pendingSignup) {
+      if (hasInitialized.current) return;
+      hasInitialized.current = true;
+      const propertyName = nextSession.user.user_metadata?.property_name || pendingSignup?.propertyName || "My Property";
+      try {
+        await initNewUser(nextSession.user.id, propertyName);
+        clearPendingSignup();
+        notifyEmailVerified(propertyName);
+        clearTimeout(revealSessionTimer.current);
+        revealSessionTimer.current = setTimeout(() => {
+          if (!mounted) return;
+          setSession(nextSession);
+          setUser(nextSession.user);
+        }, 1500);
+      } catch (error) {
+        hasInitialized.current = false;
+        logError(error);
+        setAuthError("Something went wrong");
+      }
+    }
+
+    supabase.auth.getSession().then(async ({ data, error }) => {
       if (!mounted) return;
       if (error) {
         logError(error);
         setAuthError("Something went wrong");
+      }
+      if (window.location.pathname === "/reset-password" && data.session?.user) {
+        localStorage.setItem(PASSWORD_RECOVERY_KEY, "true");
+        notifyPasswordRecovery();
+        setSession(null);
+        setUser(null);
+        setIsAuthLoading(false);
+        return;
+      }
+      if (data.session?.user) {
+        const pendingSignup = getPendingSignupForUser(data.session.user);
+        if (pendingSignup) {
+          setSession(null);
+          setUser(null);
+          setIsAuthLoading(false);
+          await revealVerifiedSession(data.session, pendingSignup);
+          return;
+        }
       }
       setSession(data.session);
       setUser(data.session?.user ?? null);
@@ -64,22 +141,49 @@ export function useAuth() {
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      setIsAuthLoading(false);
+      if (event === "SIGNED_OUT") {
+        hasInitialized.current = false;
+      }
+
+      if (event === "PASSWORD_RECOVERY" && nextSession?.user) {
+        localStorage.setItem(PASSWORD_RECOVERY_KEY, "true");
+        notifyPasswordRecovery();
+        setSession(null);
+        setUser(null);
+        setIsAuthLoading(false);
+        return;
+      }
 
       if (event === "SIGNED_IN" && nextSession?.user) {
+        const pendingSignup = getPendingSignupForUser(nextSession.user);
+        if (pendingSignup) {
+          setSession(null);
+          setUser(null);
+          setIsAuthLoading(false);
+          await revealVerifiedSession(nextSession, pendingSignup);
+          return;
+        }
+
         try {
-          await initNewUser(nextSession.user.id, nextSession.user.user_metadata?.property_name || "My Property");
+          if (!hasInitialized.current) {
+            hasInitialized.current = true;
+            await initNewUser(nextSession.user.id, nextSession.user.user_metadata?.property_name || "My Property");
+          }
         } catch (error) {
+          hasInitialized.current = false;
           logError(error);
           setAuthError("Something went wrong");
         }
       }
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      setIsAuthLoading(false);
     });
 
     return () => {
       mounted = false;
+      clearTimeout(revealSessionTimer.current);
       listener.subscription.unsubscribe();
     };
   }, []);
@@ -89,7 +193,8 @@ export function useAuth() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       logError(error);
-      setAuthError("Invalid email or password");
+      const message = error.message?.toLowerCase() || "";
+      setAuthError(message.includes("email not confirmed") || message.includes("not confirmed") ? "Please verify your email first. Check your inbox." : "Invalid email or password");
       throw error;
     }
   }
@@ -99,16 +204,17 @@ export function useAuth() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { property_name: propertyName } }
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { property_name: propertyName }
+      }
     });
     if (error) {
       logError(error);
       setAuthError("Something went wrong");
       throw error;
     }
-    if (data.session?.user) {
-      await initNewUser(data.session.user.id, propertyName);
-    }
+    writePendingSignup(email, propertyName);
     return data;
   }
 
@@ -120,7 +226,9 @@ export function useAuth() {
       setAuthError("Something went wrong");
       throw error;
     }
+    hasInitialized.current = false;
     localStorage.removeItem("activePropertyId");
+    localStorage.removeItem(PASSWORD_RECOVERY_KEY);
   }
 
   return { session, user, isAuthLoading, authError, signIn, signUp, signOut };
