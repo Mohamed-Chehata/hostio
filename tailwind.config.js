@@ -1,13 +1,19 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
         ink: "#080A0C",
-        panel: "#1A1A1A",
+        app: "rgb(var(--color-ink) / <alpha-value>)",
+        panel: "rgb(var(--color-panel) / <alpha-value>)",
+        sheet: "rgb(var(--color-sheet) / <alpha-value>)",
+        nav: "rgb(var(--color-nav) / <alpha-value>)",
         accent: "#FFD358",
-        muted: "#9A9A9A"
+        muted: "rgb(var(--color-muted) / <alpha-value>)",
+        white: "rgb(var(--color-primary) / <alpha-value>)",
+        border: "rgb(var(--color-border) / <alpha-value>)"
       },
       fontFamily: {
         sans: ['"Inter Tight"', "sans-serif"]

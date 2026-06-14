@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Home, Pencil, Plus, Receipt, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Home, Pencil, Plus, Receipt, Sparkles, Trash2, X } from "lucide-react";
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { BottomSheet } from "../components/BottomSheet";
+import { MoneyInput, validateMoneyValue } from "../components/MoneyInput";
+import { MonthNavigator } from "../components/MonthNavigator";
+import { Skeleton, SkeletonList } from "../components/Skeleton";
 import { Button, Card, Input } from "../components/ui";
-import { cn, monthLabel } from "../lib/utils";
-
-function moveMonth(month, amount) {
-  const date = new Date(`${month}-01T00:00:00`);
-  date.setMonth(date.getMonth() + amount);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
+import { cn } from "../lib/utils";
+import { monthLabel, moveMonth } from "../utils/monthUtils";
+import { ConnectionStatus } from "../components/ConnectionStatus";
+import { OfflineUnavailable } from "../components/OfflineUnavailable";
 
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
@@ -30,7 +30,7 @@ function dateHeading(value) {
   return new Date(`${value}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
-export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency, onUpdateCostLabel, onUpdateFixedCost, onAddExpense, onUpdateExpense, onDeleteExpense }) {
+export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "My Property", onOpenProperties, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, currency, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency, onUpdateCostLabel, onUpdateFixedCost, onAddExpense, onUpdateExpense, onDeleteExpense }) {
   const [costDrafts, setCostDrafts] = useState({ rent: "", cleaning: "" });
   const [addingExpense, setAddingExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -40,6 +40,7 @@ export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = 
   const previousTotal = useRef(stats.rent + stats.cleaning + stats.expenses);
   const totalCosts = stats.rent + stats.cleaning + stats.expenses;
   const totalDirection = totalCosts > previousTotal.current ? "up" : totalCosts < previousTotal.current ? "down" : null;
+  const showSkeleton = !isInitialized || isLoading;
 
   useEffect(() => {
     previousTotal.current = totalCosts;
@@ -72,73 +73,95 @@ export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = 
     setCostDrafts((current) => ({ ...current, [field]: value }));
   }
 
-  function addFixedCost(field) {
+  async function addFixedCost(field) {
     const value = costDrafts[field];
     if (value === "") return;
-    if (!Number.isFinite(Number(value))) return;
-    onUpdateFixedCost(stats.month, field, Number(value));
-    setCostDraft(field, "");
+    if (validateMoneyValue(value)) return;
+    const updated = await onUpdateFixedCost(stats.month, field, Number(value));
+    if (updated) setCostDraft(field, "");
   }
 
   return (
     <main className="px-5 pb-24 pt-6">
       <header>
+        <button onClick={onOpenProperties} className="-ml-2 mb-1 flex min-h-11 items-center gap-1 rounded-2xl px-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-accent">
+          <span className="max-w-[240px] truncate">{activePropertyName}</span>
+          <ChevronDown size={13} />
+        </button>
+        <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
         <h1 className="text-2xl font-extrabold">Expenses</h1>
         <p className="mt-1 text-sm font-bold text-accent">{monthLabel(stats.month)}</p>
       </header>
 
-      <div className="my-6 flex items-center justify-between rounded-2xl bg-panel p-2">
-        <button aria-label="Previous expenses month" onClick={() => setMonth(moveMonth(month, -1))} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 text-muted"><ChevronLeft size={18} /></button>
-        <p className="text-sm font-bold">{monthLabel(month)}</p>
-        <button aria-label="Next expenses month" onClick={() => setMonth(moveMonth(month, 1))} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 text-muted"><ChevronRight size={18} /></button>
-      </div>
+      <MonthNavigator
+        className="my-6 rounded-2xl bg-panel p-2"
+        label={monthLabel(month)}
+        previousLabel="Previous expenses month"
+        nextLabel="Next expenses month"
+        onPrevious={() => setMonth(moveMonth(month, -1))}
+        onNext={() => setMonth(moveMonth(month, 1))}
+      />
 
+      {offlineUnavailable && <OfflineUnavailable onRetry={onRetry} />}
+      <div className={offlineUnavailable ? "hidden" : ""}>
       <div className="space-y-3">
-        <CostAddRow
-          icon={Home}
-          label={costLabels.rent}
-          field="rent"
-          value={stats.rent}
-          currency={currency}
-          formatCurrency={formatCurrency}
-          draftValue={costDrafts.rent}
-          onDraftChange={(value) => setCostDraft("rent", value)}
-          onAdd={() => addFixedCost("rent")}
-          onRename={(label) => onUpdateCostLabel("rent", label)}
-        />
-        <CostAddRow
-          icon={Sparkles}
-          label={costLabels.cleaning}
-          field="cleaning"
-          value={stats.cleaning}
-          currency={currency}
-          formatCurrency={formatCurrency}
-          draftValue={costDrafts.cleaning}
-          onDraftChange={(value) => setCostDraft("cleaning", value)}
-          onAdd={() => addFixedCost("cleaning")}
-          onRename={(label) => onUpdateCostLabel("cleaning", label)}
-        />
-        <RandomExpensesCard
-          stats={stats}
-          expenses={displayExpenses}
-          formatCurrency={formatCurrency}
-          newExpenseId={newExpenseId}
-          removingExpenseIds={removingExpenses}
-          onAdd={() => setAddingExpense(true)}
-          onEdit={setEditingExpense}
-        />
+        {showSkeleton ? (
+          <ExpensesSkeleton />
+        ) : (
+          <>
+            <CostAddRow
+              icon={Home}
+              label={costLabels.rent}
+              field="rent"
+              value={stats.rent}
+              currency={currency}
+              formatCurrency={formatCurrency}
+              draftValue={costDrafts.rent}
+              onDraftChange={(value) => setCostDraft("rent", value)}
+              onAdd={() => addFixedCost("rent")}
+              onRename={(label) => onUpdateCostLabel("rent", label)}
+              pending={Boolean(stats.pendingSync)}
+            />
+            <CostAddRow
+              icon={Sparkles}
+              label={costLabels.cleaning}
+              field="cleaning"
+              value={stats.cleaning}
+              currency={currency}
+              formatCurrency={formatCurrency}
+              draftValue={costDrafts.cleaning}
+              onDraftChange={(value) => setCostDraft("cleaning", value)}
+              onAdd={() => addFixedCost("cleaning")}
+              onRename={(label) => onUpdateCostLabel("cleaning", label)}
+              pending={Boolean(stats.pendingSync)}
+            />
+            <RandomExpensesCard
+              stats={stats}
+              expenses={displayExpenses}
+              formatCurrency={formatCurrency}
+              newExpenseId={newExpenseId}
+              removingExpenseIds={removingExpenses}
+              onAdd={() => setAddingExpense(true)}
+              onEdit={setEditingExpense}
+              isLoading={showSkeleton}
+            />
+          </>
+        )}
       </div>
 
       <section className="mt-7">
         <h2 className="text-lg font-extrabold">Expense History</h2>
-        {displayExpenses.length ? (
+        {showSkeleton ? (
+          <SkeletonList className="h-[64px]" wrapperClassName="mt-3 space-y-2" />
+        ) : isInitialized && displayExpenses.length ? (
           <div className="mt-3 space-y-4">
             {Object.entries(groupedExpenses).map(([date, entries]) => (
               <div key={date}>
-                <div className="sticky top-0 z-10 -mx-1 mb-2 rounded-xl bg-ink/95 px-1 py-1 text-[11px] font-bold uppercase tracking-wider text-muted backdrop-blur">{dateHeading(date)}</div>
+                <div className="sticky top-0 z-10 -mx-1 mb-2 rounded-xl bg-app/95 px-1 py-1 text-[11px] font-bold uppercase tracking-wider text-muted backdrop-blur">{dateHeading(date)}</div>
                 <div className="space-y-2">
                   {entries.map((expense) => (
-                    <button key={`history-${expense.id}`} onClick={() => setEditingExpense(expense)} disabled={Boolean(removingExpenses[expense.id])} className={cn("flex w-full items-center justify-between rounded-2xl bg-panel px-4 py-3 text-left transition active:scale-[0.98]", removingExpenses[expense.id] && "expense-row-removing")}>
+                    <button key={`history-${expense.id}`} onClick={() => setEditingExpense(expense)} disabled={Boolean(removingExpenses[expense.id])} className={cn("relative flex w-full items-center justify-between rounded-2xl bg-panel px-4 py-3 text-left transition active:scale-[0.98]", removingExpenses[expense.id] && "expense-row-removing")}>
+                      {expense.pendingSync && <span aria-label="Waiting to sync" className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold">{expense.description}</p>
                         <p className="mt-1 text-xs font-semibold text-muted">{entryTime(expense)}</p>
@@ -153,15 +176,17 @@ export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = 
         ) : <p className="mt-4 rounded-2xl bg-panel px-4 py-5 text-center text-sm font-semibold text-muted">No expense history this month</p>}
       </section>
 
-      <SummaryCard stats={stats} costLabels={costLabels} totalCosts={totalCosts} totalDirection={totalDirection} formatCurrency={formatCurrency} />
+      {showSkeleton ? <Skeleton className="sticky bottom-[76px] z-20 mt-7 h-[156px]" /> : <SummaryCard stats={stats} costLabels={costLabels} totalCosts={totalCosts} totalDirection={totalDirection} formatCurrency={formatCurrency} />}
+      </div>
 
       {addingExpense && (
         <AddExpenseSheet
           currency={currency}
           onClose={() => setAddingExpense(false)}
-          onSave={(expense) => {
+          onSave={async (expense) => {
             const id = `${stats.month}-expense-${Date.now()}`;
-            onAddExpense(stats.month, { ...expense, id });
+            const added = await onAddExpense(stats.month, { ...expense, id });
+            if (!added) return;
             setNewExpenseId(id);
             setAddingExpense(false);
             setTimeout(() => setNewExpenseId(null), 300);
@@ -173,9 +198,9 @@ export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = 
           expense={editingExpense}
           currency={currency}
           onClose={() => setEditingExpense(null)}
-          onSave={(expense) => {
-            onUpdateExpense(stats.month, expense);
-            setEditingExpense(null);
+          onSave={async (expense) => {
+            const updated = await onUpdateExpense(stats.month, expense);
+            if (updated) setEditingExpense(null);
           }}
           onDelete={() => {
             setDeleteCandidate(editingExpense);
@@ -187,10 +212,18 @@ export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = 
         <DeleteExpenseConfirmSheet
           expense={deleteCandidate}
           onCancel={() => setDeleteCandidate(null)}
-          onConfirm={() => {
+          onConfirm={async () => {
             const expense = deleteCandidate;
             setRemovingExpenses((current) => ({ ...current, [expense.id]: expense }));
-            onDeleteExpense(stats.month, deleteCandidate.id);
+            const deleted = await onDeleteExpense(stats.month, deleteCandidate.id);
+            if (!deleted) {
+              setRemovingExpenses((current) => {
+                const next = { ...current };
+                delete next[expense.id];
+                return next;
+              });
+              return;
+            }
             setDeleteCandidate(null);
             setTimeout(() => setRemovingExpenses((current) => {
               const next = { ...current };
@@ -204,9 +237,10 @@ export function ExpensesScreen({ stats, month, setMonth, currency, costLabels = 
   );
 }
 
-function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftValue, onDraftChange, onAdd, onRename }) {
+function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftValue, onDraftChange, onAdd, onRename, pending }) {
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(label);
+  const [amountError, setAmountError] = useState("");
   const previousValue = useRef(value);
   const direction = value > previousValue.current ? "up" : value < previousValue.current ? "down" : null;
 
@@ -229,8 +263,16 @@ function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftV
     setEditingLabel(false);
   }
 
+  function saveAmount() {
+    const nextError = validateMoneyValue(draftValue);
+    setAmountError(nextError);
+    if (nextError) return;
+    onAdd();
+  }
+
   return (
-    <Card className="p-3">
+    <Card className="relative p-3">
+      {pending && <span aria-label="Waiting to sync" className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />}
       <div className="flex min-h-11 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2 text-muted">
           <Icon size={17} />
@@ -262,21 +304,38 @@ function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftV
           </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-          <div className="relative max-w-[108px]">
-            <span className="absolute left-3 top-3 text-sm font-bold text-accent">{currency.symbol}</span>
-            <input
-              type="number"
-              step="0.01"
-              value={draftValue}
-              onChange={(event) => onDraftChange(event.target.value)}
-              placeholder="0"
-              className="field-control min-h-11 w-full rounded-2xl bg-white/[0.04] pl-7 pr-3 text-right text-sm font-extrabold text-white placeholder:text-muted"
-            />
-          </div>
-          <button aria-label={`Add ${label}`} disabled={draftValue === ""} onClick={onAdd} className={cn("h-11 rounded-2xl px-4 text-sm font-extrabold transition active:scale-[0.98]", draftValue === "" ? "bg-white/5 text-muted" : "bg-accent text-ink")}>Add</button>
+          <MoneyInput
+            ariaLabel={label}
+            currency={currency}
+            value={draftValue}
+            onChange={onDraftChange}
+            externalError={amountError}
+            onValidityChange={(_, message) => setAmountError(message)}
+            className="max-w-[108px]"
+            inputClassName="pr-3 text-right text-sm font-extrabold"
+          />
+          <button aria-label={`Save ${label}`} disabled={draftValue === ""} onClick={saveAmount} className={cn("h-11 rounded-2xl px-4 text-sm font-extrabold transition active:scale-[0.98]", draftValue === "" ? "bg-white/5 text-muted" : "bg-accent text-ink")}>Save</button>
         </div>
       </div>
     </Card>
+  );
+}
+
+function ExpensesSkeleton() {
+  return (
+    <>
+      <Skeleton className="h-[78px]" />
+      <Skeleton className="h-[78px]" />
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-28 rounded-full" />
+          <Skeleton className="h-11 w-11" />
+        </div>
+        <div className="mt-4 space-y-2">
+          {[1, 2, 3].map((item) => <Skeleton key={item} className="h-[72px] rounded-[16px]" />)}
+        </div>
+      </Card>
+    </>
   );
 }
 
@@ -315,7 +374,8 @@ function RandomExpensesCard({ stats, expenses, formatCurrency, newExpenseId, rem
 
 function ExpenseRow({ expense, month, formatCurrency, isNew, isRemoving, onEdit }) {
   return (
-    <button data-expense-row={expense.id} onClick={onEdit} disabled={isRemoving} className={cn("flex h-[72px] w-full items-center justify-between gap-3 rounded-[16px] bg-[#242424] px-4 text-left transition-transform duration-150 ease-in-out active:scale-[0.97]", isNew && "animate-expense-entry", isRemoving && "expense-row-removing")}>
+    <button data-expense-row={expense.id} onClick={onEdit} disabled={isRemoving} className={cn("relative flex h-[72px] w-full items-center justify-between gap-3 rounded-[16px] border border-border bg-panel px-4 text-left transition-transform duration-150 ease-in-out active:scale-[0.97]", isNew && "animate-expense-entry", isRemoving && "expense-row-removing")}>
+        {expense.pendingSync && <span aria-label="Waiting to sync" className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />}
         <div className="min-w-0">
           <p className="truncate text-sm font-bold">{expense.description}</p>
           <p className="mt-1 text-xs font-semibold text-muted">{dateHeading(entryDate(expense, month))} · {entryTime(expense)}</p>
@@ -329,12 +389,14 @@ function AddExpenseSheet({ currency, onClose, onSave }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayInputValue);
-  const valid = description.trim() && amount && date;
-  const formValid = description.trim().length > 0 && description.trim().length <= 200 && amount && Number.isFinite(Number(amount)) && Number(amount) >= 0 && date;
+  const [amountError, setAmountError] = useState("");
+  const formValid = description.trim().length > 0 && description.trim().length <= 200 && !validateMoneyValue(amount) && date;
 
   function submit(event) {
     event.preventDefault();
-    if (!formValid) return;
+    const nextAmountError = validateMoneyValue(amount);
+    setAmountError(nextAmountError);
+    if (!formValid || nextAmountError) return;
     const now = new Date();
     const createdAt = `${date}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
     onSave({ description: description.trim(), amount: Number(amount), date, createdAt });
@@ -349,10 +411,7 @@ function AddExpenseSheet({ currency, onClose, onSave }) {
         </label>
         <label className="block">
           <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Amount</span>
-          <div className="relative">
-            <span className="absolute left-4 top-3 text-sm font-bold text-accent">{currency.symbol}</span>
-            <Input className="pl-8" type="number" min="0" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0" />
-          </div>
+          <MoneyInput ariaLabel="Amount" currency={currency} value={amount} onChange={setAmount} externalError={amountError} onValidityChange={(_, message) => setAmountError(message)} />
         </label>
         <label className="block">
           <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Date</span>
@@ -368,12 +427,14 @@ function EditExpenseSheet({ expense, currency, onClose, onSave, onDelete }) {
   const [description, setDescription] = useState(expense.description);
   const [amount, setAmount] = useState(String(expense.amount));
   const [date, setDate] = useState(entryDate(expense, expense.date?.slice(0, 7) || todayInputValue().slice(0, 7)));
-  const valid = description.trim() && amount && date;
-  const formValid = description.trim().length > 0 && description.trim().length <= 200 && amount && Number.isFinite(Number(amount)) && Number(amount) >= 0 && date;
+  const [amountError, setAmountError] = useState("");
+  const formValid = description.trim().length > 0 && description.trim().length <= 200 && !validateMoneyValue(amount) && date;
 
   function submit(event) {
     event.preventDefault();
-    if (!formValid) return;
+    const nextAmountError = validateMoneyValue(amount);
+    setAmountError(nextAmountError);
+    if (!formValid || nextAmountError) return;
     const time = expense.createdAt?.slice(11, 19) || "00:00:00";
     onSave({
       ...expense,
@@ -393,10 +454,7 @@ function EditExpenseSheet({ expense, currency, onClose, onSave, onDelete }) {
         </label>
         <label className="block">
           <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Amount</span>
-          <div className="relative">
-            <span className="absolute left-4 top-3 text-sm font-bold text-accent">{currency.symbol}</span>
-            <Input className="pl-8" type="number" min="0" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
-          </div>
+          <MoneyInput ariaLabel="Amount" currency={currency} value={amount} onChange={setAmount} externalError={amountError} onValidityChange={(_, message) => setAmountError(message)} />
         </label>
         <label className="block">
           <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">Date</span>
@@ -419,7 +477,7 @@ function DeleteExpenseConfirmSheet({ expense, onCancel, onConfirm }) {
         <h2 className="mt-4 text-xl font-extrabold">Delete expense?</h2>
         <p className="mt-2 text-sm leading-5 text-muted">This will permanently remove "{expense.description}".</p>
         <div className="mt-6 space-y-3">
-          <Button variant="danger" onClick={onConfirm} className="w-full bg-red-500 text-white hover:bg-red-500">Delete</Button>
+          <Button variant="danger" onClick={onConfirm} className="w-full bg-red-500 text-[#FFFFFF] hover:bg-red-500">Delete</Button>
           <Button variant="ghost" onClick={onCancel} className="w-full text-muted">Cancel</Button>
         </div>
       </div>
@@ -429,7 +487,7 @@ function DeleteExpenseConfirmSheet({ expense, onCancel, onConfirm }) {
 
 function SummaryCard({ stats, costLabels, totalCosts, totalDirection, formatCurrency }) {
   return (
-    <Card className="sticky bottom-[76px] z-20 mt-7 border-t-2 border-accent bg-[#202020] p-4 shadow-2xl">
+    <Card className="sticky bottom-[76px] z-20 mt-7 border-t-2 border-accent bg-panel p-4 shadow-2xl">
       <div className="space-y-2 text-sm font-semibold">
         <div className="flex items-center justify-between"><span className="text-muted">{costLabels.rent}</span><span>{formatCurrency(stats.rent)}</span></div>
         <div className="flex items-center justify-between"><span className="text-muted">{costLabels.cleaning}</span><span>{formatCurrency(stats.cleaning)}</span></div>

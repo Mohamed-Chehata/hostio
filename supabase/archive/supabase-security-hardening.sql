@@ -1,4 +1,4 @@
--- Hostio security hardening: ownership checks and backend validation.
+-- Hostrack security hardening: ownership checks and backend validation.
 
 drop policy if exists "own data only" on user_settings;
 drop policy if exists "own data only" on properties;

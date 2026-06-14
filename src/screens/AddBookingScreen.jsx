@@ -1,19 +1,37 @@
-import { useEffect, useState } from "react";
-import { Star } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CalendarClock } from "lucide-react";
 import { CalendarPicker } from "../components/CalendarPicker";
+import { MoneyInput, validateMoneyValue } from "../components/MoneyInput";
+import { PaymentStatusControl } from "../components/PaymentStatusControl";
 import { Button, Input } from "../components/ui";
-import { cn, nightsBetween } from "../lib/utils";
+import { cn, dateLabel, nightsBetween } from "../lib/utils";
+import { payoutDateLabel } from "../utils/paymentStatus";
 
-const blank = { guestName: "", checkIn: "", checkOut: "", revenue: "", rating: null, status: "Paid" };
+const blank = { guestName: "", checkIn: "", checkOut: "", revenue: "", rating: null, paymentOverride: null };
 
-export function AddBookingScreen({ booking, onCancel, onSave, onDelete, currency, embedded = false }) {
+export function AddBookingScreen({ booking, onCheckConflict, onSave, onDelete, onCancelReservation, currency, embedded = false }) {
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
   const [invalidFields, setInvalidFields] = useState([]);
+  const [revenueError, setRevenueError] = useState("");
+  const [dateConflict, setDateConflict] = useState(null);
+  const [conflictVisible, setConflictVisible] = useState(false);
+  const [checkingConflict, setCheckingConflict] = useState(false);
+  const [conflictShake, setConflictShake] = useState(0);
   const [shakeRound, setShakeRound] = useState(0);
+  const conflictRequest = useRef(0);
+  const conflictClearTimer = useRef(null);
   const nights = nightsBetween(form.checkIn, form.checkOut);
 
-  useEffect(() => setForm(booking || blank), [booking]);
+  useEffect(() => {
+    if (!booking) {
+      setForm(blank);
+      return;
+    }
+    setForm({ ...booking, revenue: String(booking.revenue ?? "") });
+  }, [booking]);
+
+  useEffect(() => () => clearTimeout(conflictClearTimer.current), []);
 
   function set(field, value) {
     setError("");
@@ -21,21 +39,78 @@ export function AddBookingScreen({ booking, onCancel, onSave, onDelete, currency
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function submit(event) {
-    event.preventDefault();
-    const invalid = [
-      (!form.guestName.trim() || form.guestName.trim().length > 200) && "guestName",
-      (!form.checkIn || !form.checkOut || nights < 1) && "dates",
-      (!form.revenue || !Number.isFinite(Number(form.revenue)) || Number(form.revenue) < 0) && "revenue",
-      (form.rating !== null && (Number(form.rating) < 1 || Number(form.rating) > 5)) && "rating"
-    ].filter(Boolean);
-    if (invalid.length) {
-      setInvalidFields(invalid);
-      setShakeRound((current) => current + 1);
-      setError("Add the guest, valid dates, and revenue to continue.");
+  function clearConflict() {
+    setConflictVisible(false);
+    clearTimeout(conflictClearTimer.current);
+    conflictClearTimer.current = setTimeout(() => setDateConflict(null), 150);
+  }
+
+  async function updateDates(nextDates) {
+    const nextNights = nightsBetween(nextDates.checkIn, nextDates.checkOut);
+    const requestId = conflictRequest.current + 1;
+    conflictRequest.current = requestId;
+    setCheckingConflict(false);
+    clearConflict();
+    if (nextNights > 90) {
+      setError("Maximum stay is 90 nights");
+      setInvalidFields((current) => [...new Set([...current, "dates"])]);      
       return;
     }
-    onSave({ ...form, id: form.id || `booking-${Date.now()}`, guestName: form.guestName.trim(), revenue: Number(form.revenue), nights });
+    setError("");
+    setInvalidFields((current) => current.filter((item) => item !== "dates"));
+    const nextForm = {
+      ...form,
+      checkIn: nextDates.checkIn,
+      checkOut: nextDates.checkOut
+    };
+    setForm((current) => ({
+      ...current,
+      checkIn: nextDates.checkIn,
+      checkOut: nextDates.checkOut
+    }));
+    if (!nextDates.checkIn || !nextDates.checkOut || !onCheckConflict) return;
+
+    setCheckingConflict(true);
+    const conflict = await onCheckConflict(nextForm);
+    if (conflictRequest.current !== requestId) return;
+    setCheckingConflict(false);
+    if (!conflict) return;
+    clearTimeout(conflictClearTimer.current);
+    setDateConflict(conflict);
+    setInvalidFields((current) => [...new Set([...current, "dates"])]);
+    requestAnimationFrame(() => setConflictVisible(true));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (checkingConflict || dateConflict) {
+      if (dateConflict) {
+        setConflictVisible(true);
+        setConflictShake((current) => current + 1);
+      }
+      return;
+    }
+    const revenue = Number(form.revenue);
+    const nextRevenueError = validateMoneyValue(form.revenue, { revenue: true });
+    const invalid = [
+      (!form.guestName.trim() || form.guestName.trim().length > 200) && "guestName",
+      (!form.checkIn || !form.checkOut || nights < 1 || nights > 90) && "dates",
+      nextRevenueError && "revenue"
+    ].filter(Boolean);
+    if (invalid.length) {
+      setRevenueError(nextRevenueError);
+      setInvalidFields(invalid);
+      setShakeRound((current) => current + 1);
+      setError(nights > 90 ? "Maximum stay is 90 nights" : "Add the guest, valid dates, and revenue to continue.");
+      return;
+    }
+    const result = await onSave({ ...form, id: form.id || `booking-${Date.now()}`, guestName: form.guestName.trim(), revenue, nights });
+    if (result?.conflict) {
+      setDateConflict(result.conflict);
+      setConflictVisible(true);
+      setInvalidFields((current) => [...new Set([...current, "dates"])]);
+      setConflictShake((current) => current + 1);
+    }
   }
 
   return (
@@ -45,27 +120,45 @@ export function AddBookingScreen({ booking, onCancel, onSave, onDelete, currency
 
       <form onSubmit={submit} className={cn("space-y-5", !embedded && "mt-7")}>
         <Field key={`guest-${shakeRound}`} label="Guest name" invalid={invalidFields.includes("guestName")}><Input maxLength={200} placeholder="Guest name" value={form.guestName} onChange={(event) => set("guestName", event.target.value)} /></Field>
-        <Field key={`dates-${shakeRound}`} label="Stay dates" invalid={invalidFields.includes("dates")} container><CalendarPicker invalid={invalidFields.includes("dates")} checkIn={form.checkIn} checkOut={form.checkOut} onChange={({ checkIn, checkOut }) => { set("dates", ""); setForm((current) => ({ ...current, checkIn, checkOut })); }} /></Field>
+        <Field key={`dates-${shakeRound}`} label="Stay dates" invalid={invalidFields.includes("dates")} container>
+          <CalendarPicker invalid={invalidFields.includes("dates")} checkIn={form.checkIn} checkOut={form.checkOut} onChange={updateDates} />
+          {form.bookingStatus !== "cancelled" && form.checkIn && form.checkOut && (
+            <div className="mt-3 flex animate-expense-entry items-start gap-2 text-[13px] font-semibold leading-5 text-muted">
+              <CalendarClock className="mt-0.5 shrink-0 text-accent" size={15} />
+              <span>Payment will be marked received automatically on {payoutDateLabel(form.checkOut)}</span>
+            </div>
+          )}
+          {form.bookingStatus !== "cancelled" && booking && form.checkIn && form.checkOut && (
+            <div className="mt-3 flex animate-expense-entry items-center justify-between rounded-2xl bg-panel px-4 py-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted">Payment status</span>
+              <PaymentStatusControl booking={form} onChange={(paymentOverride) => set("paymentOverride", paymentOverride)} />
+            </div>
+          )}
+          {dateConflict && (
+            <p key={conflictShake} className={cn("mt-2 text-sm font-semibold text-[#EF4444] transition-[opacity,transform] duration-150 ease-in", conflictVisible ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0", conflictShake > 0 && "animate-booking-conflict")}>
+              These dates overlap with {dateConflict.guestName}'s booking ({dateLabel(dateConflict.checkIn)} → {dateLabel(dateConflict.checkOut)})
+            </p>
+          )}
+        </Field>
         <div className="rounded-2xl bg-panel p-4 text-center">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Stay length</p>
           <p className="mt-1 text-xl font-extrabold text-accent">{nights ? `${nights} ${nights === 1 ? "night" : "nights"}` : "Select dates"}</p>
         </div>
         <Field key={`revenue-${shakeRound}`} label="Revenue" invalid={invalidFields.includes("revenue")}>
-          <div className="relative"><span className="absolute left-4 top-3 text-sm font-bold text-accent">{currency.symbol}</span><Input className="pl-8" type="number" min="0" step="0.01" placeholder="0" value={form.revenue} onChange={(event) => set("revenue", event.target.value)} /></div>
-        </Field>
-        <Field label="Rating (optional)">
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5].map((rating) => <button type="button" aria-label={`${rating} star rating`} key={rating} onClick={() => set("rating", rating)} className={cn("grid h-11 w-11 place-items-center rounded-2xl bg-panel transition-colors duration-200", rating <= form.rating ? "text-accent" : "text-muted")}><Star size={17} fill={rating <= form.rating ? "currentColor" : "none"} /></button>)}
-          </div>
-        </Field>
-        <Field label="Payment status">
-          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-panel p-1.5">
-            {["Paid", "Unpaid"].map((status) => <button type="button" key={status} onClick={() => set("status", status)} className={cn("min-h-11 rounded-xl py-2.5 text-sm font-bold transition-colors duration-200", form.status === status ? "bg-accent text-ink" : "text-muted")}>{status}</button>)}
-          </div>
+          <MoneyInput
+            ariaLabel="Revenue"
+            currency={currency}
+            revenue
+            value={form.revenue}
+            onChange={(value) => set("revenue", value)}
+            externalError={revenueError}
+            onValidityChange={(_, message) => setRevenueError(message)}
+          />
         </Field>
         {error && <p className="text-sm font-semibold text-orange-300">{error}</p>}
-        <Button className="w-full py-4" type="submit">{booking ? "Save changes" : "Save booking"}</Button>
-        {booking && onDelete && <button type="button" className="w-full py-2 text-sm font-bold text-red-400 transition-colors hover:text-red-300" onClick={onDelete}>Delete</button>}
+        <Button disabled={checkingConflict || Boolean(dateConflict)} className="w-full py-4 transition-opacity duration-200 disabled:cursor-not-allowed disabled:opacity-40" type="submit">{booking ? "Save changes" : "Save booking"}</Button>
+        {booking?.bookingStatus !== "cancelled" && onCancelReservation && <button type="button" className="w-full py-2 text-sm font-bold text-red-400 transition-colors hover:text-red-300" onClick={() => onCancelReservation(booking)}>Cancel reservation</button>}
+        {booking && onDelete && <button type="button" className="w-full py-2 text-sm font-bold text-red-400/80 transition-colors hover:text-red-300" onClick={onDelete}>Delete</button>}
       </form>
     </main>
   );

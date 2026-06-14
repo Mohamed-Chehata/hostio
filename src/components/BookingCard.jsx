@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, LoaderCircle, Star, Trash2 } from "lucide-react";
-import { Badge, Card } from "./ui";
+import { Check, LoaderCircle, Trash2 } from "lucide-react";
+import { PaymentStatusControl } from "./PaymentStatusControl";
+import { Card } from "./ui";
 import { dateLabel } from "../lib/utils";
 
 export function BookingCard({
@@ -8,12 +9,10 @@ export function BookingCard({
   formatCurrency,
   onClick,
   onRequestDelete,
-  onToggleStatus,
+  onPaymentOverride,
   onOpenSwipe,
   onCloseSwipe,
-  onFirstSwipe,
   isOpen = false,
-  teachSwipe = false,
   deletionStage,
   compact = false
 }) {
@@ -24,6 +23,7 @@ export function BookingCard({
   const [offset, setOffset] = useState(0);
   const [showDeleteZone, setShowDeleteZone] = useState(false);
   const [statusAnimating, setStatusAnimating] = useState(false);
+  const cancelled = booking.bookingStatus === "cancelled";
 
   useEffect(() => {
     cardRef.current.style.transform = `translateX(${offset}px)`;
@@ -43,27 +43,18 @@ export function BookingCard({
     }
   }, [isOpen, deletionStage]);
 
-  useEffect(() => {
-    if (!teachSwipe || deletionStage) return;
-    const slide = setTimeout(() => {
-      setShowDeleteZone(true);
-      setOffset(-60);
-    }, 250);
-    const snap = setTimeout(() => {
-      setOffset(0);
-      setTimeout(() => setShowDeleteZone(false), 150);
-    }, 850);
-    return () => {
-      clearTimeout(slide);
-      clearTimeout(snap);
-    };
-  }, [teachSwipe, deletionStage]);
-
-  function toggleStatus() {
-    if (!onToggleStatus || deletionStage) return;
+  function pulseStatus() {
+    if (deletionStage) return;
     setStatusAnimating(false);
-    requestAnimationFrame(() => setStatusAnimating(true));
-    onToggleStatus(booking.id);
+    requestAnimationFrame(() => {
+      setStatusAnimating(true);
+      setTimeout(() => setStatusAnimating(false), 350);
+    });
+  }
+
+  function changePaymentOverride(paymentOverride) {
+    if (!onPaymentOverride || deletionStage) return;
+    onPaymentOverride(booking.id, paymentOverride);
   }
 
   function pointerDown(event) {
@@ -85,7 +76,6 @@ export function BookingCard({
   function pointerUp(event) {
     if (deletionStage) return;
     const distance = event.clientX - startX.current;
-    if (Math.abs(distance) > 22) onFirstSwipe?.();
     if (startOffset.current + distance < -54) {
       onOpenSwipe?.(booking.id);
       setOffset(-88);
@@ -114,7 +104,7 @@ export function BookingCard({
       className={`booking-card-shell relative h-[112px] overflow-hidden rounded-[16px] ${deletionStage === "removing" ? "booking-card-removing" : ""}`}
     >
       {showDeleteZone && (
-        <button aria-label={`Delete ${booking.guestName}`} onClick={(event) => { event.stopPropagation(); onRequestDelete?.(booking); }} className="absolute inset-0 flex items-center justify-end bg-red-500 pr-4 text-white">
+        <button aria-label={`Delete ${booking.guestName}`} onClick={(event) => { event.stopPropagation(); onRequestDelete?.(booking); }} className="absolute inset-0 flex items-center justify-end bg-red-500 pr-4 text-[#FFFFFF]">
           <Trash2 size={16} /> Delete
         </button>
       )}
@@ -127,21 +117,19 @@ export function BookingCard({
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
-        className={`booking-card-content relative z-10 flex h-[112px] cursor-pointer touch-pan-y items-center justify-between gap-3 rounded-[16px] bg-panel p-4 transition-transform duration-150 ease-in-out active:scale-[0.97] ${deletionStage ? "opacity-40" : ""}`}
+        className={`booking-card-content relative z-10 h-[112px] cursor-pointer touch-pan-y rounded-[16px] bg-panel p-4 transition-transform duration-150 ease-in-out active:scale-[0.97] ${deletionStage ? "opacity-40" : ""}`}
       >
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-bold">{booking.guestName}</h3>
-            <Badge status={booking.status} animating={statusAnimating} onAnimationEnd={() => setStatusAnimating(false)} onClick={(event) => { event.stopPropagation(); toggleStatus(); }} />
-          </div>
-          <p className="mt-1 text-xs text-muted">{dateLabel(booking.checkIn)} → {dateLabel(booking.checkOut)}{!compact && ` · ${booking.nights} nights`}</p>
-          {!compact && booking.rating && (
-            <div className="mt-2 flex items-center gap-1 text-[11px] font-bold text-accent">
-              <Star size={12} fill="currentColor" /> {booking.rating}.0
+        {booking.pendingSync && <span aria-label="Waiting to sync" className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent shadow-[0_0_0_2px_rgb(var(--color-panel))]" />}
+        <div className={`flex h-full items-center justify-between gap-3 ${cancelled ? "opacity-60" : ""}`}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-sm font-bold">{booking.guestName}</h3>
+              {cancelled ? <span className="rounded-full bg-[#F0F0F0] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] dark:bg-[#2A2A2A] dark:text-[#9A9A9A]">Cancelled</span> : <PaymentStatusControl booking={booking} onChange={changePaymentOverride} onPulse={pulseStatus} />}
             </div>
-          )}
+            <p className={`mt-1 text-xs text-muted ${cancelled ? "line-through decoration-red-300/70" : ""}`}>{dateLabel(booking.checkIn)} &rarr; {dateLabel(booking.checkOut)}{!compact && <> &middot; {booking.nights} nights</>}</p>
+          </div>
+          <p className={`shrink-0 text-sm font-extrabold text-accent ${statusAnimating ? "animate-revenue-pulse" : ""}`}>{formatCurrency(booking.revenue)}</p>
         </div>
-        <p className={`shrink-0 text-sm font-extrabold text-accent ${statusAnimating ? "animate-revenue-pulse" : ""}`}>{formatCurrency(booking.revenue)}</p>
       </Card>
       {deletionStage && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
@@ -156,3 +144,4 @@ export function BookingCard({
     </div>
   );
 }
+

@@ -48,9 +48,9 @@ export function BottomSheet({ title, description, onClose, children, externalClo
       className={`sheet-backdrop fixed inset-0 z-50 flex items-end justify-center px-3 ${lifted ? "pb-[max(76px,env(safe-area-inset-bottom))]" : ""} ${closing || externalClosing ? "sheet-backdrop-closing" : ""}`}
       onClick={close}
     >
-      <section ref={sheetRef} className={`bottom-sheet w-full max-w-[390px] overflow-y-auto rounded-t-[28px] bg-[#202020] px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-3 shadow-2xl ${lifted ? "max-h-[calc(100vh-96px)] rounded-b-[28px]" : "max-h-[92vh]"} ${closing || externalClosing ? "bottom-sheet-closing" : ""}`} onClick={(event) => event.stopPropagation()}>
+      <section ref={sheetRef} className={`bottom-sheet w-full max-w-[390px] overflow-y-auto rounded-t-[28px] border border-border bg-sheet px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-3 text-white shadow-2xl ${lifted ? "max-h-[calc(100vh-96px)] rounded-b-[28px]" : "max-h-[92vh]"} ${closing || externalClosing ? "bottom-sheet-closing" : ""}`} onClick={(event) => event.stopPropagation()}>
         <div className="flex min-h-11 touch-none items-center justify-center" onPointerDown={dragStartSheet} onPointerMove={dragSheet} onPointerUp={dragEnd} onPointerCancel={dragEnd}>
-          <div className="h-1 w-10 rounded-full bg-white/25" />
+          <div className="h-1 w-10 rounded-full bg-muted/50" />
         </div>
         <div className="flex items-start justify-between gap-4">
           <div>

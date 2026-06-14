@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { BottomSheet } from "./BottomSheet";
-import { cn, dateLabel, monthLabel } from "../lib/utils";
+import { MonthNavigator } from "./MonthNavigator";
+import { cn, dateLabel } from "../lib/utils";
+import { currentMonthKey, monthLabel, moveMonth } from "../utils/monthUtils";
 
 const weekDays = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -9,13 +11,9 @@ function formatDate(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function moveMonth(month, amount) {
-  return new Date(month.getFullYear(), month.getMonth() + amount, 1);
-}
-
 export function CalendarPicker({ checkIn, checkOut, onChange, invalid = false }) {
   const [open, setOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date(`${checkIn || "2025-07-01"}T00:00:00`));
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(`${checkIn || `${currentMonthKey()}-01`}T00:00:00`));
   const [draftStart, setDraftStart] = useState(checkIn);
   const [draftEnd, setDraftEnd] = useState(checkOut);
   const [closing, setClosing] = useState(false);
@@ -44,9 +42,9 @@ export function CalendarPicker({ checkIn, checkOut, onChange, invalid = false })
 
   function applyDates() {
     if (!draftStart || !draftEnd) return;
+    onChange({ checkIn: draftStart, checkOut: draftEnd });
     setClosing(true);
     setTimeout(() => {
-      onChange({ checkIn: draftStart, checkOut: draftEnd });
       setOpen(false);
       setClosing(false);
     }, 400);
@@ -54,7 +52,7 @@ export function CalendarPicker({ checkIn, checkOut, onChange, invalid = false })
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={cn("field-control flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left text-sm", invalid && "animate-field-shake border-orange-400")}>
+      <button type="button" onClick={() => setOpen(true)} className={cn("field-control flex w-full items-center justify-between rounded-2xl border border-border bg-panel px-4 py-3 text-left text-sm transition-colors duration-150", invalid && "animate-field-shake border-[#EF4444] border-b-[#EF4444]")}>
         <span className={checkIn && checkOut ? "text-white" : "text-muted"}>
           {checkIn && checkOut ? `${dateLabel(checkIn)} → ${dateLabel(checkOut)}` : "Select check-in and checkout"}
         </span>
@@ -62,11 +60,16 @@ export function CalendarPicker({ checkIn, checkOut, onChange, invalid = false })
       </button>
       {open && (
         <BottomSheet title="Select dates" description="Tap a check-in date, then choose checkout." onClose={() => setOpen(false)} externalClosing={closing}>
-          <div className="flex items-center justify-between rounded-2xl bg-white/5 p-2">
-            <button type="button" aria-label="Previous calendar month" onClick={() => setVisibleMonth((current) => moveMonth(current, -1))} className="grid h-9 w-9 place-items-center rounded-xl text-muted"><ChevronLeft size={18} /></button>
-            <p className="text-sm font-bold">{monthLabel(`${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, "0")}`)}</p>
-            <button type="button" aria-label="Next calendar month" onClick={() => setVisibleMonth((current) => moveMonth(current, 1))} className="grid h-9 w-9 place-items-center rounded-xl text-muted"><ChevronRight size={18} /></button>
-          </div>
+          <MonthNavigator
+            className="rounded-2xl bg-white/5 p-2"
+            label={monthLabel(`${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, "0")}`)}
+            labelClassName="min-w-0"
+            arrowClassName="h-9 min-h-9 w-9 rounded-xl bg-transparent"
+            previousLabel="Previous calendar month"
+            nextLabel="Next calendar month"
+            onPrevious={() => setVisibleMonth((current) => moveMonth(current, -1))}
+            onNext={() => setVisibleMonth((current) => moveMonth(current, 1))}
+          />
           <div className="mt-4 grid grid-cols-7 gap-1 text-center">
             {weekDays.map((day, index) => <span key={`${day}-${index}`} className="py-1 text-[10px] font-bold text-muted">{day}</span>)}
             {days.map((date, index) => date ? (

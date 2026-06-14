@@ -1,8 +1,9 @@
 import { forwardRef } from "react";
+import { Pin } from "lucide-react";
 import { cn } from "../lib/utils";
 
 export const Card = forwardRef(function Card({ className, ...props }, ref) {
-  return <div ref={ref} className={cn("rounded-2xl bg-panel", className)} {...props} />;
+  return <div ref={ref} className={cn("rounded-2xl border border-border bg-panel", className)} {...props} />;
 });
 
 export function Button({ className, variant = "primary", ...props }) {
@@ -23,22 +24,23 @@ export function Button({ className, variant = "primary", ...props }) {
 export function Input({ className, ...props }) {
   return (
     <input
-      className={cn("field-control min-h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder:text-muted", className)}
+      className={cn("field-control min-h-11 w-full rounded-2xl border border-border bg-panel px-4 py-3 text-sm text-white placeholder:text-muted", className)}
       {...props}
     />
   );
 }
 
-export function Badge({ status, onClick, animating = false, onAnimationEnd }) {
+export function Badge({ status, overridden = false, onClick, animating = false, onAnimationEnd }) {
   const paid = status === "Paid";
+  const pending = status === "Pending";
   const badge = (
-    <span onAnimationEnd={onAnimationEnd} className={cn("status-badge relative block min-w-[54px] rounded-full px-2.5 py-1 text-center text-[10px] font-bold uppercase tracking-wider", paid ? "bg-emerald-400/10 text-emerald-300" : "bg-orange-400/10 text-orange-300", animating && "animate-status-toggle")}>
-      <span className={cn("status-badge-label", paid ? "opacity-100" : "opacity-0")}>Paid</span>
-      <span className={cn("status-badge-label absolute inset-0 grid place-items-center", paid ? "opacity-0" : "opacity-100")}>Unpaid</span>
+    <span onAnimationEnd={onAnimationEnd} className={cn("status-badge relative inline-flex min-w-[64px] items-center justify-center gap-1 rounded-full px-2.5 py-1 text-center text-[10px] font-bold uppercase tracking-wider", paid ? "bg-[#E6F9F0] text-[#1A7A4A] dark:bg-[#1A3D2E] dark:text-[#4ADE80]" : "bg-[#FFF0E0] text-[#C45C00] dark:bg-[#3D2A1A] dark:text-[#FB923C]", animating && "animate-status-toggle")}>
+      {overridden && <Pin size={10} fill="currentColor" />}
+      {pending ? "Pending" : status}
     </span>
   );
   if (onClick) {
-    return <button type="button" aria-label={`Mark as ${paid ? "Unpaid" : "Paid"}`} onClick={onClick} className="grid min-h-11 place-items-center">{badge}</button>;
+    return <button type="button" aria-label="Payment status options" onClick={onClick} className="grid min-h-11 place-items-center">{badge}</button>;
   }
   return badge;
 }

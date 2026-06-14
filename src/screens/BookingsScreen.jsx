@@ -1,35 +1,34 @@
-import { CalendarX2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarX2, ChevronDown } from "lucide-react";
 import { BookingCard } from "../components/BookingCard";
-import { monthKey, monthLabel } from "../lib/utils";
+import { MonthNavigator } from "../components/MonthNavigator";
+import { Skeleton } from "../components/Skeleton";
+import { monthKey, monthLabel, moveMonth } from "../utils/monthUtils";
+import { ConnectionStatus } from "../components/ConnectionStatus";
+import { OfflineUnavailable } from "../components/OfflineUnavailable";
 
-function moveMonth(month, amount) {
-  const date = new Date(`${month}-01T00:00:00`);
-  date.setMonth(date.getMonth() + amount);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", bookings, isLoading = false, formatCurrency, onSelect, onRequestDelete, onToggleStatus, openSwipeId, onOpenSwipe, onCloseSwipe, onFirstSwipe, hasSeenSwipeHint, deletionStages }) {
+export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", onOpenProperties, bookings, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, formatCurrency, onSelect, onRequestDelete, onPaymentOverride, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages }) {
   const visible = bookings.filter((booking) => monthKey(booking.checkIn) === month).sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+  const showSkeleton = !isInitialized || isLoading;
 
   return (
     <main className="px-5 pb-24 pt-6">
-      <p className="mb-1 max-w-[240px] truncate text-[11px] font-bold uppercase tracking-[0.18em] text-accent">{activePropertyName}</p>
+      <button onClick={onOpenProperties} className="-ml-2 mb-1 flex min-h-11 items-center gap-1 rounded-2xl px-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-accent">
+        <span className="max-w-[240px] truncate">{activePropertyName}</span>
+        <ChevronDown size={13} />
+      </button>
+      <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
       <h1 className="text-2xl font-extrabold">Bookings</h1>
 
-      <div className="my-6 flex items-center justify-between rounded-2xl bg-panel p-2">
-        <button aria-label="Previous month" onClick={() => setMonth(moveMonth(month, -1))} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 text-muted"><ChevronLeft size={18} /></button>
-        <p className="text-sm font-bold">{monthLabel(month)}</p>
-        <button aria-label="Next month" onClick={() => setMonth(moveMonth(month, 1))} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/5 text-muted"><ChevronRight size={18} /></button>
-      </div>
+      <MonthNavigator className="my-6 rounded-2xl bg-panel p-2" label={monthLabel(month)} onPrevious={() => setMonth(moveMonth(month, -1))} onNext={() => setMonth(moveMonth(month, 1))} />
 
-      {isLoading ? (
+      {offlineUnavailable ? <OfflineUnavailable onRetry={onRetry} /> : showSkeleton ? (
         <div className="space-y-2">
           {[0, 1, 2].map((item) => <BookingCardSkeleton key={item} />)}
         </div>
-      ) : visible.length ? (
+      ) : isInitialized && visible.length ? (
         <>
           <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">{visible.length} reservations</p>
-          <div className="space-y-2">{visible.map((booking, index) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} onClick={() => onSelect(booking)} onRequestDelete={onRequestDelete} onToggleStatus={onToggleStatus} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} onFirstSwipe={onFirstSwipe} teachSwipe={index === 0 && !hasSeenSwipeHint} deletionStage={deletionStages[booking.id]} />)}</div>
+          <div className="space-y-2">{visible.map((booking) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} onClick={() => onSelect(booking)} onRequestDelete={onRequestDelete} onPaymentOverride={onPaymentOverride} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} deletionStage={deletionStages[booking.id]} />)}</div>
         </>
       ) : (
         <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
@@ -44,8 +43,8 @@ export function BookingsScreen({ month, setMonth, activePropertyName = "My Prope
 
 function BookingCardSkeleton() {
   return (
-    <div className="h-[118px] rounded-2xl bg-[#2A2A2A] p-4">
-      <div className="skeleton-shimmer h-full rounded-xl" />
+    <div className="skeleton-shimmer h-[118px] rounded-2xl p-4">
+      <Skeleton className="h-full rounded-xl" />
     </div>
   );
 }

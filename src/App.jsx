@@ -1,76 +1,223 @@
-import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertTriangle, Check, X } from "lucide-react";
+import logo from "./assets/logo.png";
 import { BottomNav } from "./components/BottomNav";
 import { BookingEditSheet } from "./components/BookingEditSheet";
-import { CostsSheet } from "./components/CostsSheet";
+import { CancellationPayoutSheet } from "./components/CancellationPayoutSheet";
 import { DeleteBookingSheet } from "./components/DeleteBookingSheet";
-import { AddPropertySheet, DeletePropertySheet, PropertySelectorSheet } from "./components/PropertySheets";
+import { AddPropertySheet, PropertyActionSheet, PropertyDeletedSheet, PropertySelectorSheet } from "./components/PropertySheets";
+import { PullToRefresh } from "./components/PullToRefresh";
 import { SplashScreen } from "./components/SplashScreen";
 import { Toast } from "./components/Toast";
+import { SyncFailuresSheet } from "./components/SyncFailuresSheet";
 import { useApp } from "./context/AppContext";
 import { useAppData } from "./hooks/useAppData";
 import { useAuth } from "./hooks/useAuth";
+import { useSubscription } from "./hooks/useSubscription";
+import { useToast } from "./hooks/useToast";
+import { supabase } from "./lib/supabase";
 import { AddBookingScreen } from "./screens/AddBookingScreen";
+import { AllPropertiesScreen } from "./screens/AllPropertiesScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BookingsScreen } from "./screens/BookingsScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
 import { ExpensesScreen } from "./screens/ExpensesScreen";
+import { ImportBookingsScreen } from "./screens/ImportBookingsScreen";
+import { PaywallScreen } from "./screens/PaywallScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
+import { getDataError, getToastTypeForError } from "./utils/errorHandler";
+import { currentMonthKey, moveMonth } from "./utils/monthUtils";
 
-const tabOrder = { dashboard: 0, bookings: 1, add: 2, expenses: 3, stats: 4 };
+const tabOrder = { dashboard: 0, bookings: 1, add: 2, expenses: 3, stats: 4, settings: 5, "import-bookings": 6, "all-properties": 7 };
 const tabScreens = new Set(Object.keys(tabOrder));
+const transientScreens = new Set(["import-bookings"]);
 
 export default function App() {
   const app = useApp();
   const auth = useAuth();
-  const hasShownSplash = useRef(false);
-  const [showSplash, setShowSplash] = useState(() => !hasShownSplash.current);
-  const [revealContent, setRevealContent] = useState(() => hasShownSplash.current);
-  const [screen, setScreen] = useState("dashboard");
+  const subscription = useSubscription(auth.user);
+  const { toast, showToast, dismissToast } = useToast();
+  const [showSplash, setShowSplash] = useState(() => sessionStorage.getItem("splashShown") !== "true");
+  const [revealContent, setRevealContent] = useState(() => sessionStorage.getItem("splashShown") === "true");
+  const [recoveryMode, setRecoveryMode] = useState(() => window.location.pathname === "/reset-password" || window.location.hash.includes("type=recovery"));
+  const [accountTransition, setAccountTransition] = useState(null);
+  const [authAction, setAuthAction] = useState(null);
+  const [syncReviewOpen, setSyncReviewOpen] = useState(false);
+  const [screen, setScreen] = useState(() => {
+    const saved = sessionStorage.getItem("activeTab");
+    return tabScreens.has(saved) ? saved : "dashboard";
+  });
   const [screenDirection, setScreenDirection] = useState(1);
   const [exitingScreen, setExitingScreen] = useState(null);
   const [exitingDirection, setExitingDirection] = useState(1);
-  const [selectedMonth, setSelectedMonth] = useState("2025-07");
-  const [expensesMonth, setExpensesMonth] = useState("2025-07");
-  const dashboardMonth = "2025-07";
-  const data = useAppData(auth.user, [dashboardMonth, selectedMonth, expensesMonth]);
+  const [dashboardMonth, setDashboardMonth] = useState(currentMonthKey);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+  const [expensesMonth, setExpensesMonth] = useState(currentMonthKey);
+  const data = useAppData(subscription.isResolved && subscription.hasAccess ? auth.user : null, [dashboardMonth, selectedMonth, expensesMonth]);
+  const [isDarkTheme, setIsDarkTheme] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const currency = useMemo(() => app.resolveCurrency(data.userSettings), [app, data.userSettings]);
+  const formatCurrency = useCallback((amount) => app.formatCurrency(amount, currency.symbol), [app, currency.symbol]);
   const [editingSheet, setEditingSheet] = useState(null);
-  const [costsOpen, setCostsOpen] = useState(false);
+  const [cancellationCandidate, setCancellationCandidate] = useState(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [addingProperty, setAddingProperty] = useState(false);
-  const [propertyDeleteCandidate, setPropertyDeleteCandidate] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [propertyAction, setPropertyAction] = useState(null);
+  const [deletingProperty, setDeletingProperty] = useState(null);
+  const [deletedProperty, setDeletedProperty] = useState(null);
+  const deletedPropertyNextId = useRef(null);
   const [openSwipeId, setOpenSwipeId] = useState(null);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deletionStages, setDeletionStages] = useState({});
-  const [hasSeenSwipeHint, setHasSeenSwipeHint] = useState(() => localStorage.getItem("hasSeenSwipeHint") === "true");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
+  const [loadingFloorComplete, setLoadingFloorComplete] = useState(false);
   const swallowNextClick = useRef(false);
   const transitionTimer = useRef(null);
-  const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || { month: dashboardMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
-  const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || { month: expensesMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
+  const loadingStartedAt = useRef(null);
+  const previousSession = useRef(auth.session);
+  const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || { month: dashboardMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
+  const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || { month: expensesMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
+  const dashboardBookings = data.bookingsByMonth[dashboardMonth] || [];
+  const authenticatedStateReady = subscription.isResolved
+    && (!subscription.hasAccess || data.baseInitialized);
+  const rawAppReady = !auth.isAuthLoading
+    && (!auth.session || recoveryMode || authenticatedStateReady);
+  const isAppReady = rawAppReady && loadingFloorComplete;
+
+  useEffect(() => {
+    if (loadingFloorComplete) return undefined;
+    let timer;
+
+    if (!revealContent) {
+      return undefined;
+    }
+
+    if (loadingStartedAt.current === null) {
+      loadingStartedAt.current = Date.now();
+    }
+
+    if (!rawAppReady) return undefined;
+
+    const remaining = Math.max(0, 1000 - (Date.now() - loadingStartedAt.current));
+    timer = setTimeout(() => setLoadingFloorComplete(true), remaining);
+    return () => clearTimeout(timer);
+  }, [loadingFloorComplete, rawAppReady, revealContent]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const theme = data.userSettings.theme || "system";
+    const applyTheme = () => {
+      const dark = theme === "dark" || (theme === "system" && media.matches);
+      document.documentElement.classList.toggle("dark", dark);
+      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#080A0C" : "#F5F5F5");
+      setIsDarkTheme(dark);
+    };
+    applyTheme();
+    if (theme !== "system") return undefined;
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
+  }, [data.userSettings.theme]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function handleRecoveryHash() {
+      const hash = window.location.hash;
+      if (!hash || !hash.includes("type=recovery")) return;
+
+      setRecoveryMode(true);
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+
+      if (!accessToken || !refreshToken) {
+        window.history.replaceState({}, "", "/");
+        setRecoveryMode(false);
+        return;
+      }
+
+      localStorage.setItem("hostrackPasswordRecovery", "true");
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+
+      if (cancelled) return;
+      if (error) {
+        window.history.replaceState({}, "", "/");
+        setRecoveryMode(false);
+        return;
+      }
+
+      window.history.replaceState({}, "", "/reset-password");
+      window.dispatchEvent(new CustomEvent("hostrack:password-recovery"));
+    }
+
+    handleRecoveryHash();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (screen === "stats") data.fetchStatsMonths();
   }, [data.activePropertyId, screen]);
 
   useEffect(() => {
+    const wasSignedOut = !previousSession.current;
+    previousSession.current = auth.session;
+    if (!wasSignedOut || !auth.session) return;
+    sessionStorage.setItem("activeTab", "dashboard");
+    sessionStorage.removeItem("statsPageIndex");
+    setScreen("dashboard");
+  }, [auth.session]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadProfileInitial() {
+      const { data: userData } = await supabase.auth.getUser();
+      if (cancelled) return;
+      const email = userData.user?.email || auth.user?.email || "";
+      setAccountEmail(email);
+    }
+    if (auth.session) loadProfileInitial();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.session, auth.user?.email]);
+
+  useEffect(() => {
     if (!data.error) return;
-    const message = data.error.message === "You need at least one property" ? "You need at least one property" : "Something went wrong";
-    showErrorToast(message);
+    const message = data.error.message === "You need at least one property" ? "You need at least one property" : getDataError(data.error);
+    showToast(message, getToastTypeForError(data.error, message));
     data.setError(null);
-  }, [data.error]);
+  }, [data.error, showToast]);
+
+  useEffect(() => {
+    if (!subscription.error) return;
+    showToast("Something went wrong", "error");
+  }, [showToast, subscription.error]);
+
+  useEffect(() => {
+    if (authAction !== "login") return;
+    if (!auth.session || !authenticatedStateReady) return;
+    setAuthAction(null);
+  }, [auth.session, authAction, authenticatedStateReady]);
 
   function openEditor(booking) {
     setEditingSheet(booking);
   }
 
-  function saveBooking(booking) {
-    data.addBooking(booking);
+  async function saveBooking(booking) {
+    const saved = await data.saveBooking(booking);
+    if (!saved || saved.conflict) return saved;
     setSelectedMonth(booking.checkIn.slice(0, 7));
     setEditingSheet(null);
     if (screen === "add") navigate("bookings");
-    showToast("Booking saved");
+    showToast("Booking saved", "success");
+    return saved;
   }
 
   function requestDelete(booking) {
@@ -79,66 +226,177 @@ export default function App() {
     setDeleteCandidate(booking);
   }
 
+  function requestCancellation(booking) {
+    setEditingSheet(null);
+    setCancellationCandidate(booking);
+  }
+
+  async function confirmCancellation({ percent, availableAt }) {
+    if (!cancellationCandidate) return false;
+    const originalRevenue = Number(cancellationCandidate.originalRevenue ?? cancellationCandidate.revenue ?? 0);
+    const adjustedRevenue = originalRevenue * (percent / 100);
+    const saved = await data.saveBooking({
+      ...cancellationCandidate,
+      bookingStatus: "cancelled",
+      originalRevenue,
+      revenue: adjustedRevenue,
+      cancellationPayoutPercent: percent,
+      cancellationPayoutAvailableAt: availableAt.toISOString()
+    });
+    if (!saved || saved.conflict) return false;
+    setCancellationCandidate(null);
+    showToast("Reservation cancelled", "success");
+    return true;
+  }
+
   function cancelDelete() {
     setDeleteCandidate(null);
     setOpenSwipeId(null);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
+    if (!deleteCandidate) return;
     const id = deleteCandidate.id;
     setDeleteCandidate(null);
     setOpenSwipeId(null);
     setDeletionStages((current) => ({ ...current, [id]: "loading" }));
-    setTimeout(() => setDeletionStages((current) => ({ ...current, [id]: "done" })), 2000);
-    setTimeout(() => setDeletionStages((current) => ({ ...current, [id]: "removing" })), 2800);
-    setTimeout(() => {
-      data.deleteBooking(id);
+    const deleted = await data.deleteBooking(id, { deferLocalRemoval: true });
+    if (!deleted) {
       setDeletionStages((current) => {
         const next = { ...current };
         delete next[id];
         return next;
       });
-    }, 3150);
-  }
-
-  function recordFirstSwipe() {
-    if (hasSeenSwipeHint) return;
-    localStorage.setItem("hasSeenSwipeHint", "true");
-    setHasSeenSwipeHint(true);
-  }
-
-  function showToast(message) {
-    setToast({ message, closing: false, type: "success" });
-    setTimeout(() => setToast((current) => current ? { ...current, closing: true } : null), 1700);
-    setTimeout(() => setToast(null), 2000);
-  }
-
-  function showErrorToast(message = "Something went wrong") {
-    setToast({ message, closing: false, type: "error" });
-    setTimeout(() => setToast((current) => current ? { ...current, closing: true } : null), 2700);
-    setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    setDeletionStages((current) => ({ ...current, [id]: "done" }));
+    setTimeout(() => setDeletionStages((current) => ({ ...current, [id]: "removing" })), 800);
+    setTimeout(() => {
+      data.finalizeBookingDeletion(id, deleted.month);
+      setDeletionStages((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    }, 1150);
   }
 
   function navigate(next) {
     setEditingSheet(null);
-    setCostsOpen(false);
     setOpenSwipeId(null);
     if (tabScreens.has(screen) && tabScreens.has(next) && screen !== next) {
       const nextDirection = tabOrder[next] > tabOrder[screen] ? 1 : -1;
       setScreenDirection(nextDirection);
       setExitingDirection(nextDirection);
-      setExitingScreen(screen);
       clearTimeout(transitionTimer.current);
-      transitionTimer.current = setTimeout(() => setExitingScreen(null), 220);
+      if (screen === "import-bookings") {
+        setExitingScreen(null);
+      } else {
+        setExitingScreen(screen);
+        transitionTimer.current = setTimeout(() => setExitingScreen(null), 220);
+      }
     }
-    if (next === "stats") data.fetchStatsMonths();
+    if (tabScreens.has(next) && !transientScreens.has(next)) sessionStorage.setItem("activeTab", next);
     setScreen(next);
   }
 
-  function toggleBookingStatus(id) {
+  function updateBookingPaymentOverride(id, paymentOverride) {
     const booking = data.bookings.find((item) => item.id === id);
     if (!booking) return;
-    data.updateBooking({ ...booking, status: booking.status === "Paid" ? "Unpaid" : "Paid" });
+    data.saveBooking({ ...booking, paymentOverride });
+  }
+
+  async function updateCostLabel(field, label) {
+    const updated = await data.updateUserSettings(field === "rent" ? { cost_label_1: label } : { cost_label_2: label });
+    if (updated) showToast("Label updated", "success");
+  }
+
+  async function updateFixedCost(month, field, amount) {
+    const updated = await data.updateFixedCost(month, field, amount);
+    if (updated) showToast(`${field === "rent" ? data.costLabels.rent : data.costLabels.cleaning} updated`, "success");
+  }
+
+  async function addExpense(month, expense) {
+    const added = await data.addExpense(month, expense);
+    if (added) showToast("Expense added", "success");
+    return added;
+  }
+
+  async function updateExpense(month, expense) {
+    const updated = await data.updateExpense(month, expense);
+    if (updated) showToast("Expense updated", "success");
+    return updated;
+  }
+
+  async function deleteExpense(month, id) {
+    const deleted = await data.deleteExpense(month, id);
+    if (deleted) showToast("Expense deleted", "success");
+    return deleted;
+  }
+
+  async function renameProperty(id, name) {
+    const renamed = await data.renameProperty(id, name);
+    if (renamed) showToast("Property renamed", "success");
+    return renamed;
+  }
+
+  function switchProperty(id) {
+    data.setActivePropertyId(id);
+  }
+
+  async function updateCurrency(code) {
+    const option = app.currencies[code];
+    return data.updateUserSettings({ currency: code, currency_symbol: option?.symbol || currency.symbol });
+  }
+
+  async function deleteAccountData() {
+    setAccountTransition({ type: "delete", stage: "working" });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const deleted = await data.deleteUserData();
+    if (!deleted) {
+      setAccountTransition(null);
+      return false;
+    }
+    setAccountTransition({ type: "delete", stage: "done" });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    clearSignedOutStorage();
+    await auth.signOut();
+    setAccountTransition(null);
+    return true;
+  }
+
+  function clearSignedOutStorage() {
+    sessionStorage.removeItem("activeTab");
+    sessionStorage.removeItem("statsPageIndex");
+    localStorage.removeItem("activePropertyId");
+  }
+
+  async function signOutWithTransition() {
+    setAccountTransition({ type: "signout", stage: "working" });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const startedAt = Date.now();
+    clearSignedOutStorage();
+    try {
+      await auth.signOut();
+      const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    } finally {
+      setAccountTransition(null);
+    }
+  }
+
+  function changeDashboardMonth(amount) {
+    setDashboardMonth((current) => moveMonth(current, amount));
+  }
+
+  function openExpensesForDashboardMonth() {
+    setExpensesMonth(dashboardMonth);
+    navigate("expenses");
+  }
+
+  function seeAllDashboardBookings() {
+    setSelectedMonth(dashboardMonth);
+    navigate("bookings");
   }
 
   function closeSwipeFromOutside(event) {
@@ -158,11 +416,69 @@ export default function App() {
   }
 
   function renderTabScreen(tabName) {
-    if (tabName === "dashboard") return <DashboardScreen onNavigate={navigate} onSignOut={auth.signOut} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onEditCosts={() => setCostsOpen(true)} onEditBooking={openEditor} onRequestDelete={requestDelete} onToggleStatus={toggleBookingStatus} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} onFirstSwipe={recordFirstSwipe} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={data.bookings} costLabels={data.costLabels} formatCurrency={app.formatCurrency} />;
-    if (tabName === "bookings") return <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} bookings={data.bookings} isLoading={data.isLoading} formatCurrency={app.formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onToggleStatus={toggleBookingStatus} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} onFirstSwipe={recordFirstSwipe} hasSeenSwipeHint={hasSeenSwipeHint} deletionStages={deletionStages} />;
-    if (tabName === "add") return <AddBookingScreen currency={app.currency} onSave={saveBooking} />;
-    if (tabName === "expenses") return <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} currency={app.currency} costLabels={data.costLabels} formatCurrency={app.formatCurrency} onUpdateCostLabel={(field, label) => data.updateUserSettings(field === "rent" ? { cost_label_1: label } : { cost_label_2: label })} onUpdateFixedCost={data.addFixedCost} onAddExpense={data.addExpense} onUpdateExpense={data.updateExpense} onDeleteExpense={data.deleteExpense} />;
-    if (tabName === "stats") return <StatsScreen stats={data.statsMonths.length ? data.statsMonths : data.monthlyStats} activePropertyName={data.activeProperty?.name || "My Property"} formatCurrency={app.formatCurrency} />;
+    if (tabName === "dashboard") return (
+      <PullToRefresh onRefresh={() => data.refreshMonth(dashboardMonth)}>
+        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => showToast("Payments coming soon — contact support to continue", "warning")} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={data.isMonthLoading(dashboardMonth)} isInitialized={data.isMonthInitialized(dashboardMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} />
+      </PullToRefresh>
+    );
+    if (tabName === "bookings") return (
+      <PullToRefresh onRefresh={() => data.refreshMonth(selectedMonth)}>
+        <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} bookings={data.bookingsByMonth[selectedMonth] || []} isLoading={data.isMonthLoading(selectedMonth)} isInitialized={data.isMonthInitialized(selectedMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(selectedMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(selectedMonth)} formatCurrency={formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} />
+      </PullToRefresh>
+    );
+    if (tabName === "add") return <AddBookingScreen currency={currency} onCheckConflict={data.checkBookingConflict} onSave={saveBooking} />;
+    if (tabName === "expenses") return (
+      <PullToRefresh onRefresh={() => data.refreshMonth(expensesMonth)}>
+        <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} isLoading={data.isMonthLoading(expensesMonth)} isInitialized={data.isMonthInitialized(expensesMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(expensesMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(expensesMonth)} currency={currency} costLabels={data.costLabels} formatCurrency={formatCurrency} onUpdateCostLabel={updateCostLabel} onUpdateFixedCost={updateFixedCost} onAddExpense={addExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} />
+      </PullToRefresh>
+    );
+    if (tabName === "stats") return (
+      <PullToRefresh onRefresh={data.refreshStatsMonths}>
+        <StatsScreen stats={data.statsMonths} isLoading={data.statsLoading} isInitialized={data.statsInitialized} activePropertyId={data.activePropertyId} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} onRetry={data.fetchStatsMonths} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} />
+      </PullToRefresh>
+    );
+    if (tabName === "all-properties") return <AllPropertiesScreen properties={data.properties} monthsData={data.allPropertiesMonths} isMonthLoading={data.isAllPropertiesMonthLoading} isMonthInitialized={data.isAllPropertiesMonthInitialized} fetchMonth={data.fetchAllPropertiesMonth} refreshMonth={data.refreshAllPropertiesMonth} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} onBack={() => navigate("dashboard")} />;
+    if (tabName === "import-bookings") return (
+      <ImportBookingsScreen
+        properties={data.properties}
+        formatCurrency={formatCurrency}
+        onBack={() => navigate("settings")}
+        onAddProperty={(name) => data.addProperty(name, { activate: false })}
+        onCheckConflicts={data.checkImportConflicts}
+        onImport={data.importBookings}
+        onViewBookings={(propertyId, month) => {
+          data.setActivePropertyId(propertyId);
+          if (month) setSelectedMonth(month);
+          navigate("bookings");
+        }}
+      />
+    );
+    if (tabName === "settings") return (
+      <SettingsScreen
+        currency={currency}
+        currencies={app.currencies}
+        subscription={subscription.subscription}
+        trialDaysRemaining={subscription.trialDaysRemaining}
+        theme={data.userSettings.theme || "system"}
+        updateTheme={async (theme) => {
+          const updated = await data.updateUserSettings({ theme });
+          if (updated) showToast("Appearance updated", "success");
+          return updated;
+        }}
+        updateCurrency={updateCurrency}
+        onCurrencyUpdated={() => showToast("Currency updated", "success")}
+        email={accountEmail}
+        onImportData={() => navigate("import-bookings")}
+        onChangePassword={async () => {
+          const sent = await auth.sendPasswordReset();
+          showToast(sent ? "Password reset email sent" : "Something went wrong", sent ? "success" : "error");
+          return sent;
+        }}
+        onSignOut={signOutWithTransition}
+        onDeleteAccount={deleteAccountData}
+        onBack={() => navigate("dashboard")}
+      />
+    );
     return null;
   }
 
@@ -176,17 +492,36 @@ export default function App() {
     return exitingDirection > 0 ? "animate-screen-exit-left" : "animate-screen-exit-right";
   }
 
-  const content = auth.isAuthLoading ? (
-    <main className="mx-auto grid min-h-screen max-w-[390px] place-items-center bg-ink px-5 text-center">
-      <div>
-        <div className="mx-auto h-12 w-12 animate-pulse rounded-2xl bg-accent" />
-        <p className="mt-4 text-sm font-bold text-muted">Loading Hostio...</p>
-      </div>
-    </main>
-  ) : !auth.session ? (
-    <AuthScreen onSignIn={auth.signIn} onSignUp={auth.signUp} onSignedUp={() => setScreen("dashboard")} error={auth.authError} />
+  const authScreen = (
+    <AuthScreen
+      initialMode={recoveryMode ? "reset-password" : undefined}
+      onRecoveryComplete={() => setRecoveryMode(false)}
+      onSignIn={auth.signIn}
+      onSignUp={auth.signUp}
+      onLoadingChange={setAuthAction}
+      onSignedUp={() => {
+        sessionStorage.setItem("activeTab", "dashboard");
+        sessionStorage.removeItem("statsPageIndex");
+        setScreen("dashboard");
+      }}
+      error={auth.authError}
+    />
+  );
+
+  const content = authAction ? (
+    authScreen
+  ) : !isAppReady ? (
+    <AppLoadingScreen />
+  ) : !auth.session || recoveryMode ? (
+    authScreen
+  ) : !subscription.hasAccess ? (
+    <PaywallScreen
+      subscription={subscription.subscription}
+      onSubscribe={() => showToast("Payments coming soon — contact support to continue", "warning")}
+      onSignOut={signOutWithTransition}
+    />
   ) : (
-    <div className="mx-auto min-h-screen max-w-[390px] overflow-hidden bg-ink" onPointerDownCapture={closeSwipeFromOutside} onClickCapture={swallowOutsideClick}>
+    <div className="mx-auto min-h-screen max-w-[390px] overflow-hidden bg-app" onPointerDownCapture={closeSwipeFromOutside} onClickCapture={swallowOutsideClick}>
       {tabScreens.has(screen) && (
         <div className="relative min-h-screen">
           {exitingScreen && (
@@ -206,46 +541,107 @@ export default function App() {
           </div>
         </div>
       )}
-      {screen === "settings" && <SettingsScreen currency={app.currency} currencies={app.currencies} updateCurrency={app.updateCurrency} onBack={() => navigate("dashboard")} />}
-      {screen !== "settings" && <BottomNav active={screen} onNavigate={navigate} />}
-            {costsOpen && <CostsSheet stats={currentStats} currency={app.currency} costLabels={data.costLabels} onClose={() => setCostsOpen(false)} onSave={(costs) => { data.updateMonthlyCosts(currentStats.month, costs); setCostsOpen(false); }} />}
+      {screen !== "settings" && screen !== "all-properties" && screen !== "import-bookings" && <BottomNav active={screen} onNavigate={navigate} />}
             {propertiesOpen && (
               <PropertySelectorSheet
                 properties={data.properties}
                 activePropertyId={data.activePropertyId}
+                deletingProperty={deletingProperty}
                 onSelect={(id) => {
-                  data.setActivePropertyId(id);
+                  switchProperty(id);
                   setPropertiesOpen(false);
                 }}
                 onAdd={() => {
                   setPropertiesOpen(false);
                   setAddingProperty(true);
                 }}
-                onRename={data.renameProperty}
-                onRequestDelete={(property) => setPropertyDeleteCandidate(property)}
+                onAction={setPropertyAction}
                 onClose={() => setPropertiesOpen(false)}
+              />
+            )}
+            {propertyAction && (
+              <PropertyActionSheet
+                property={propertyAction}
+                onClose={() => setPropertyAction(null)}
+                onRename={async (name) => {
+                  const renamed = await renameProperty(propertyAction.id, name);
+                  if (renamed) setPropertyAction(null);
+                  return renamed;
+                }}
+                onConfirmDelete={async () => {
+                  if (data.properties.length <= 1) {
+                    showToast("You need at least one property", "warning");
+                    return false;
+                  }
+                  const property = propertyAction;
+                  const result = await data.deleteProperty(property.id, {
+                    switchToRemaining: false,
+                    deferLocalRemoval: true
+                  });
+                  if (!result) return false;
+                  deletedPropertyNextId.current = result.nextPropertyId;
+                  setDeletingProperty({ id: property.id, phase: "flash" });
+                  setDeletedProperty(property);
+                  setTimeout(() => setDeletingProperty({ id: property.id, phase: "collapse" }), 150);
+                  return true;
+                }}
               />
             )}
             {addingProperty && (
               <AddPropertySheet
                 onClose={() => setAddingProperty(false)}
                 onSave={async (name) => {
-                  await data.addProperty(name);
-                  setAddingProperty(false);
+                  const property = await data.addProperty(name);
+                  if (property) {
+                    const currentMonth = currentMonthKey();
+                    setDashboardMonth(currentMonth);
+                    setSelectedMonth(currentMonth);
+                    setExpensesMonth(currentMonth);
+                    showToast("Property added", "success");
+                    setAddingProperty(false);
+                  }
                 }}
               />
             )}
-            <DeletePropertySheet
-              property={propertyDeleteCandidate}
-              onCancel={() => setPropertyDeleteCandidate(null)}
-              onConfirm={async () => {
-                await data.deleteProperty(propertyDeleteCandidate.id);
-                setPropertyDeleteCandidate(null);
-              }}
-            />
-            <BookingEditSheet booking={editingSheet} currency={app.currency} onClose={() => setEditingSheet(null)} onSave={saveBooking} onDelete={requestDelete} />
+            {deletedProperty && (
+              <PropertyDeletedSheet
+                property={deletedProperty}
+                onComplete={() => {
+                  const nextPropertyId = deletedPropertyNextId.current;
+                  setDeletedProperty(null);
+                  setDeletingProperty(null);
+                  setPropertiesOpen(false);
+                  deletedPropertyNextId.current = null;
+                  data.finalizePropertyDeletion(deletedProperty.id);
+                  if (nextPropertyId) switchProperty(nextPropertyId);
+                }}
+              />
+            )}
+            <BookingEditSheet booking={editingSheet} currency={currency} onClose={() => setEditingSheet(null)} onCheckConflict={data.checkBookingConflict} onSave={saveBooking} onDelete={requestDelete} onCancelReservation={requestCancellation} />
+      <CancellationPayoutSheet booking={cancellationCandidate} formatCurrency={formatCurrency} onCancel={() => setCancellationCandidate(null)} onConfirm={confirmCancellation} />
       <DeleteBookingSheet booking={deleteCandidate} onCancel={cancelDelete} onConfirm={confirmDelete} />
-      <Toast message={toast?.message} closing={toast?.closing} type={toast?.type} />
+      {data.syncFailures.length > 0 && !syncReviewOpen && (
+        <div className="fixed bottom-[88px] left-1/2 z-[69] flex w-[calc(100%-24px)] max-w-[366px] -translate-x-1/2 items-center rounded-2xl bg-[#78350F] text-[#FFFFFF] shadow-2xl">
+          <button onClick={() => setSyncReviewOpen(true)} className="flex min-h-14 flex-1 items-center gap-3 px-4 text-left text-sm font-extrabold">
+            <AlertTriangle size={18} />
+            <span>Some changes couldn't be saved. Tap to review.</span>
+          </button>
+          <button aria-label="Dismiss sync warning" onClick={data.dismissSyncFailures} className="grid h-11 w-11 shrink-0 place-items-center">
+            <X size={17} />
+          </button>
+        </div>
+      )}
+      {syncReviewOpen && (
+        <SyncFailuresSheet
+          failures={data.syncFailures}
+          formatCurrency={formatCurrency}
+          onRetry={data.retrySyncOperation}
+          onRetryAll={data.processSyncQueue}
+          onDiscard={data.discardSyncOperation}
+          onClose={() => setSyncReviewOpen(false)}
+        />
+      )}
+      <Toast message={toast?.message} closing={toast?.closing} type={toast?.type} duration={toast?.duration} persistent={toast?.persistent} toastKey={toast?.id} onDismiss={dismissToast} />
     </div>
   );
 
@@ -262,11 +658,53 @@ export default function App() {
         <SplashScreen
           onReveal={() => setRevealContent(true)}
           onComplete={() => {
-            hasShownSplash.current = true;
+            sessionStorage.setItem("splashShown", "true");
             setShowSplash(false);
           }}
         />
       )}
+      <AnimatePresence>
+        {accountTransition && <AccountTransitionOverlay transition={accountTransition} />}
+      </AnimatePresence>
     </>
+  );
+}
+
+function AppLoadingScreen() {
+  return (
+    <main className="mx-auto grid min-h-screen max-w-[390px] place-items-center bg-app px-5 text-center">
+      <div>
+        <span className="mx-auto block h-6 w-6 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
+        <p className="mt-3 text-xs font-bold text-muted">Loading...</p>
+      </div>
+    </main>
+  );
+}
+
+function AccountTransitionOverlay({ transition }) {
+  const done = transition.stage === "done";
+  const text = transition.type === "delete"
+    ? done ? "Done" : "Deleting your account..."
+    : "Signing out...";
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="fixed inset-0 z-[100] grid place-items-center bg-app">
+      <div className="text-center">
+        {done ? (
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.25, ease: [0.34, 1.56, 0.64, 1] }} className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-500 text-[#FFFFFF]">
+            <Check size={30} strokeWidth={3} />
+          </motion.div>
+        ) : (
+          <motion.img
+            src={logo}
+            alt="Hostrack"
+            className="mx-auto h-16 w-16 rounded-2xl object-cover"
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ duration: 1, ease: "easeInOut", repeat: Infinity }}
+          />
+        )}
+        <p className="mt-5 text-sm font-bold text-muted">{text}</p>
+      </div>
+    </motion.div>
   );
 }

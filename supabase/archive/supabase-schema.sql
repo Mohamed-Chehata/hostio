@@ -1,4 +1,4 @@
--- Hostio Supabase schema.
+-- Hostrack Supabase schema.
 -- Users are handled by Supabase Auth automatically.
 
 -- User settings (currency, custom category names)

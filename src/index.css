@@ -5,12 +5,56 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+    --color-ink: 245 245 245;
+    --color-panel: 255 255 255;
+    --color-primary: 10 10 10;
+    --color-muted: 107 107 107;
+    --color-border: 229 229 229;
+    --color-sheet: 255 255 255;
+    --color-nav: 255 255 255;
+    --color-skeleton-base: #E5E5E5;
+    --color-skeleton-shine: #F5F5F5;
+    --chart-grid: #E5E5E5;
+    --chart-zero: rgba(10, 10, 10, 0.28);
+    --chart-cursor: rgba(10, 10, 10, 0.04);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --color-ink: 8 10 12;
+    --color-panel: 26 26 26;
+    --color-primary: 255 255 255;
+    --color-muted: 154 154 154;
+    --color-border: 42 42 42;
+    --color-sheet: 32 32 32;
+    --color-nav: 15 15 15;
+    --color-skeleton-base: #2A2A2A;
+    --color-skeleton-shine: #343434;
+    --chart-grid: #2A2A2A;
+    --chart-zero: rgba(255, 255, 255, 0.28);
+    --chart-cursor: rgba(255, 255, 255, 0.04);
+  }
+
   * {
-    @apply border-white/10;
+    border-color: rgb(var(--color-border));
   }
 
   body {
-    @apply min-h-screen bg-ink font-sans text-white antialiased;
+    @apply min-h-screen bg-app font-sans text-white antialiased;
+    transition: background-color 300ms ease, color 300ms ease, border-color 300ms ease;
+  }
+
+  body main,
+  body nav,
+  body section,
+  body article,
+  body input,
+  body select {
+    transition-property: background-color, color, border-color;
+    transition-duration: 300ms;
+    transition-timing-function: ease;
   }
 
   button,
@@ -84,13 +128,18 @@
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translate(-50%, 14px); }
+  from { opacity: 0; transform: translate(-50%, 20px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 @keyframes toast-out {
   from { opacity: 1; transform: translate(-50%, 0); }
-  to { opacity: 0; transform: translate(-50%, 14px); }
+  to { opacity: 0; transform: translate(-50%, 16px); }
+}
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
 }
 
 @keyframes delete-done {
@@ -199,9 +248,19 @@
   to { background-position: -200% 0; }
 }
 
+@keyframes import-file-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.animate-import-file-progress {
+  animation: import-file-progress 1200ms ease-out both;
+}
+
 .animate-field-shake { animation: field-shake 200ms ease; }
-.animate-toast-in { animation: toast-in 250ms ease both; }
-.animate-toast-out { animation: toast-out 300ms ease both; }
+.animate-toast-in { animation: toast-in 200ms ease-out both; }
+.animate-toast-out { animation: toast-out 250ms ease-in both; }
+.toast-progress { animation-name: toast-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
 .animate-delete-done { animation: delete-done 200ms cubic-bezier(0.32, 0.72, 0, 1) both; }
 .booking-card-removing { animation: booking-remove 350ms ease-in-out both; }
 .animate-status-toggle { animation: status-toggle 350ms cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -219,7 +278,128 @@
 .animate-expense-entry { animation: expense-entry 250ms ease-out both; }
 .expense-row-removing { animation: expense-row-remove 450ms ease-in-out both; overflow: hidden; pointer-events: none; }
 .skeleton-shimmer {
-  background-image: linear-gradient(90deg, #2A2A2A 0%, #343434 45%, #2A2A2A 90%);
+  background-color: var(--color-skeleton-base);
+  background-image: linear-gradient(90deg, var(--color-skeleton-base) 0%, var(--color-skeleton-shine) 45%, var(--color-skeleton-base) 90%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.25s ease-in-out infinite;
 }
+@keyframes property-actions-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes property-actions-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes property-confirmation-enter {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes property-confirmation-exit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(40px); }
+}
+
+@keyframes property-rename-enter {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes property-rename-exit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(40px); }
+}
+
+.animate-property-actions-exit {
+  animation: property-actions-exit 150ms ease-in both;
+}
+
+.animate-property-actions-enter {
+  animation: property-actions-enter 200ms ease-out both;
+}
+
+.animate-property-confirmation-enter {
+  animation: property-confirmation-enter 250ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.animate-property-confirmation-exit {
+  animation: property-confirmation-exit 150ms ease-in both;
+}
+
+.animate-property-rename-enter {
+  animation: property-rename-enter 250ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.animate-property-rename-exit {
+  animation: property-rename-exit 150ms ease-in both;
+}
+@keyframes booking-conflict {
+  0% { opacity: 0; transform: translate(-0, -4px); }
+  25% { opacity: 1; transform: translate(-4px, 0); }
+  75% { opacity: 1; transform: translate(4px, 0); }
+  100% { opacity: 1; transform: translate(0, 0); }
+}
+
+@keyframes payment-menu-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes payment-menu-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
+}
+
+.animate-booking-conflict {
+  animation: booking-conflict 200ms ease-out both;
+}
+
+.animate-payment-menu {
+  animation: payment-menu-in 150ms ease-out both;
+}
+
+.animate-payment-menu-out {
+  animation: payment-menu-out 150ms ease-in both;
+}
+
+@keyframes connection-enter {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes connection-exit {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-10px); }
+}
+
+@keyframes offline-dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+@keyframes reconnected-dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.4); }
+}
+
+@keyframes offline-retry-shake {
+  0%, 100% { transform: translateX(0); }
+  33% { transform: translateX(-4px); }
+  66% { transform: translateX(4px); }
+}
+
+.animate-connection-enter { animation: connection-enter 200ms ease-out both; }
+.animate-connection-exit { animation: connection-exit 150ms ease-in both; }
+.animate-offline-dot { animation: offline-dot-pulse 1.5s ease-in-out infinite; }
+.animate-reconnected-dot { animation: reconnected-dot-pulse 300ms ease-in-out both; }
+.animate-offline-retry-shake { animation: offline-retry-shake 150ms ease-out both; }
+
+@keyframes sync-item-remove {
+  from { max-height: 220px; opacity: 1; transform: translateY(0); padding-top: 1rem; padding-bottom: 1rem; }
+  to { max-height: 0; opacity: 0; transform: translateY(-6px); padding-top: 0; padding-bottom: 0; border-width: 0; }
+}
+
+.animate-sync-item-remove { animation: sync-item-remove 300ms ease-in-out both; }

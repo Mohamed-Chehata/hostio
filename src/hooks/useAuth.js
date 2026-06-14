@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { getAuthError } from "../utils/errorHandler";
+import { PRICING } from "../config/pricing";
+import "../utils/storageMigration";
 
-const PENDING_SIGNUP_KEY = "hostioPendingSignup";
-const PASSWORD_RECOVERY_KEY = "hostioPasswordRecovery";
-const VERIFIED_EVENT = "hostio:email-verified";
-const PASSWORD_RECOVERY_EVENT = "hostio:password-recovery";
+const PENDING_SIGNUP_KEY = "hostrackPendingSignup";
+const PASSWORD_RECOVERY_KEY = "hostrackPasswordRecovery";
+const VERIFIED_EVENT = "hostrack:email-verified";
+const PASSWORD_RECOVERY_EVENT = "hostrack:password-recovery";
+const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
+const RESET_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}/reset-password`;
 
 function logError(error) {
   if (import.meta.env.DEV) console.error(error?.message || error);
@@ -46,6 +51,7 @@ export async function initNewUser(userId, propertyName = "My Property") {
     .from("properties")
     .select("id")
     .eq("user_id", userId)
+    .limit(1)
     .maybeSingle();
 
   if (propertyReadError) throw propertyReadError;
@@ -73,7 +79,28 @@ export async function initNewUser(userId, propertyName = "My Property") {
         currency: "EUR",
         currency_symbol: "€",
         cost_label_1: "Rent",
-        cost_label_2: "Cleaning"
+        cost_label_2: "Cleaning",
+        theme: "system"
+      });
+    if (error) throw error;
+  }
+
+  const { data: existingSubscription, error: subscriptionReadError } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (subscriptionReadError) throw subscriptionReadError;
+
+  if (!existingSubscription) {
+    const trialEndsAt = new Date(Date.now() + PRICING.trialDays * 86400000).toISOString();
+    const { error } = await supabase
+      .from("subscriptions")
+      .insert({
+        user_id: userId,
+        status: "trialing",
+        trial_ends_at: trialEndsAt
       });
     if (error) throw error;
   }
@@ -107,7 +134,7 @@ export function useAuth() {
       } catch (error) {
         hasInitialized.current = false;
         logError(error);
-        setAuthError("Something went wrong");
+        setAuthError(getAuthError(error));
       }
     }
 
@@ -115,7 +142,7 @@ export function useAuth() {
       if (!mounted) return;
       if (error) {
         logError(error);
-        setAuthError("Something went wrong");
+        setAuthError(getAuthError(error));
       }
       if (window.location.pathname === "/reset-password" && data.session?.user) {
         localStorage.setItem(PASSWORD_RECOVERY_KEY, "true");
@@ -155,6 +182,15 @@ export function useAuth() {
       }
 
       if (event === "SIGNED_IN" && nextSession?.user) {
+        if (window.location.pathname === "/reset-password" || localStorage.getItem(PASSWORD_RECOVERY_KEY) === "true") {
+          localStorage.setItem(PASSWORD_RECOVERY_KEY, "true");
+          notifyPasswordRecovery();
+          setSession(null);
+          setUser(null);
+          setIsAuthLoading(false);
+          return;
+        }
+
         const pendingSignup = getPendingSignupForUser(nextSession.user);
         if (pendingSignup) {
           setSession(null);
@@ -172,7 +208,7 @@ export function useAuth() {
         } catch (error) {
           hasInitialized.current = false;
           logError(error);
-          setAuthError("Something went wrong");
+          setAuthError(getAuthError(error));
         }
       }
 
@@ -193,10 +229,11 @@ export function useAuth() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       logError(error);
-      const message = error.message?.toLowerCase() || "";
-      setAuthError(message.includes("email not confirmed") || message.includes("not confirmed") ? "Please verify your email first. Check your inbox." : "Invalid email or password");
+      setAuthError(getAuthError(error));
       throw error;
     }
+    sessionStorage.setItem("activeTab", "dashboard");
+    sessionStorage.removeItem("statsPageIndex");
   }
 
   async function signUp(email, password, propertyName = "My Property") {
@@ -211,7 +248,7 @@ export function useAuth() {
     });
     if (error) {
       logError(error);
-      setAuthError("Something went wrong");
+      setAuthError(getAuthError(error));
       throw error;
     }
     writePendingSignup(email, propertyName);
@@ -223,13 +260,33 @@ export function useAuth() {
     const { error } = await supabase.auth.signOut();
     if (error) {
       logError(error);
-      setAuthError("Something went wrong");
+      setAuthError(getAuthError(error));
       throw error;
     }
     hasInitialized.current = false;
     localStorage.removeItem("activePropertyId");
     localStorage.removeItem(PASSWORD_RECOVERY_KEY);
+    localStorage.removeItem("hostrack-data-cache");
+    localStorage.removeItem("hostrack-base-cache");
+    localStorage.removeItem("hostrack-pending-sync");
+    localStorage.removeItem("hostrack-sync-id-map");
+    sessionStorage.removeItem("activeTab");
+    sessionStorage.removeItem("statsPageIndex");
   }
 
-  return { session, user, isAuthLoading, authError, signIn, signUp, signOut };
+  async function sendPasswordReset() {
+    if (!user?.email) return false;
+    setAuthError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: RESET_REDIRECT_URL
+    });
+    if (error) {
+      logError(error);
+      setAuthError(getAuthError(error));
+      return false;
+    }
+    return true;
+  }
+
+  return { session, user, isAuthLoading, authError, signIn, signUp, signOut, sendPasswordReset };
 }

@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Eye, EyeOff } from "lucide-react";
 import logo from "../assets/logo.png";
 import { supabase } from "../lib/supabase";
 import { Input } from "../components/ui";
+import { getAuthError } from "../utils/errorHandler";
 
 const variants = {
   enter: (direction) => ({ x: direction * 30, opacity: 0 }),
@@ -18,8 +19,8 @@ function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
-  const [mode, setMode] = useState(() => window.location.pathname === "/reset-password" ? "reset-password" : "sign-in");
+export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSignedUp, initialMode, onRecoveryComplete, onBackFromForgot }) {
+  const [mode, setMode] = useState(() => initialMode || (window.location.pathname === "/reset-password" ? "reset-password" : "sign-in"));
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [email, setEmail] = useState("");
@@ -56,20 +57,29 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
     const timer = setTimeout(() => {
       if (mode === "reset-success") {
         supabase.auth.signOut().finally(() => {
-          localStorage.removeItem("hostioPasswordRecovery");
+          localStorage.removeItem("hostrackPasswordRecovery");
           window.history.replaceState({}, "", "/");
           setSuccess(false);
           setMode("sign-in");
           setPassword("");
           setConfirmPassword("");
           setLocalError("");
+          onRecoveryComplete?.();
         });
         return;
       }
       onSignedUp();
-    }, mode === "reset-success" ? 2000 : 1500);
+    }, 1500);
     return () => clearTimeout(timer);
-  }, [mode, onSignedUp, success]);
+  }, [mode, onRecoveryComplete, onSignedUp, success]);
+
+  useEffect(() => {
+    if (initialMode !== "reset-password") return;
+    setDirection(1);
+    setMode("reset-password");
+    setSuccess(false);
+    setLocalError("");
+  }, [initialMode]);
 
   useEffect(() => {
     function handleEmailVerified(event) {
@@ -80,8 +90,8 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       setSuccess(true);
     }
 
-    window.addEventListener("hostio:email-verified", handleEmailVerified);
-    return () => window.removeEventListener("hostio:email-verified", handleEmailVerified);
+    window.addEventListener("hostrack:email-verified", handleEmailVerified);
+    return () => window.removeEventListener("hostrack:email-verified", handleEmailVerified);
   }, [propertyName]);
 
   useEffect(() => {
@@ -99,8 +109,8 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       window.history.replaceState({}, "", "/reset-password");
     }
 
-    window.addEventListener("hostio:password-recovery", handlePasswordRecovery);
-    return () => window.removeEventListener("hostio:password-recovery", handlePasswordRecovery);
+    window.addEventListener("hostrack:password-recovery", handlePasswordRecovery);
+    return () => window.removeEventListener("hostrack:password-recovery", handlePasswordRecovery);
   }, []);
 
   useEffect(() => {
@@ -113,12 +123,13 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       setDirection(-1);
       setMode("sign-in");
       setLocalError("");
+      onRecoveryComplete?.();
     }, 500);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [mode]);
+  }, [mode, onRecoveryComplete]);
 
   function switchMode(nextMode) {
     setLocalError("");
@@ -158,12 +169,13 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
     if (!canContinue || submitting) return;
     setSubmitting(true);
     setLocalError("");
+    onLoadingChange?.("login");
     try {
       await onSignIn(email.trim(), password);
-    } catch {
-      // The hook exposes the error text.
-    } finally {
+    } catch (error) {
+      setLocalError(getAuthError(error));
       setSubmitting(false);
+      onLoadingChange?.(null);
     }
   }
 
@@ -172,16 +184,18 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
     if (!canContinue || submitting) return;
     setSubmitting(true);
     setLocalError("");
+    onLoadingChange?.("create");
     try {
       await onSignUp(email.trim(), password, propertyName.trim());
       setVerificationEmail(email.trim());
       setResendSeconds(60);
       setDirection(1);
       setMode("verify");
-    } catch {
-      // The hook exposes the error text.
+    } catch (error) {
+      setLocalError(getAuthError(error));
     } finally {
       setSubmitting(false);
+      onLoadingChange?.(null);
     }
   }
 
@@ -197,8 +211,8 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       });
       if (error) throw error;
       setResendSeconds(60);
-    } catch {
-      setLocalError("Something went wrong");
+    } catch (error) {
+      setLocalError(getAuthError(error));
     } finally {
       setSubmitting(false);
     }
@@ -218,8 +232,8 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       setResendSeconds(60);
       setDirection(1);
       setMode("forgot-success");
-    } catch {
-      setLocalError("Something went wrong");
+    } catch (error) {
+      setLocalError(getAuthError(error));
     } finally {
       setSubmitting(false);
     }
@@ -235,8 +249,8 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       });
       if (error) throw error;
       setResendSeconds(60);
-    } catch {
-      setLocalError("Something went wrong");
+    } catch (error) {
+      setLocalError(getAuthError(error));
     } finally {
       setSubmitting(false);
     }
@@ -254,8 +268,8 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
       setSuccessSubtitle("You can now log in with your new password");
       setMode("reset-success");
       setSuccess(true);
-    } catch {
-      setLocalError("Something went wrong");
+    } catch (error) {
+      setLocalError(getAuthError(error));
     } finally {
       setSubmitting(false);
     }
@@ -272,7 +286,7 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-[390px] overflow-hidden bg-ink px-5 text-white">
+    <main className="mx-auto min-h-screen max-w-[390px] overflow-hidden bg-app px-5 text-white">
       <AnimatePresence mode="wait" custom={direction}>
         {success ? (
           <motion.section key="success" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="grid min-h-screen place-items-center text-center">
@@ -331,7 +345,15 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
         ) : mode === "forgot-password" ? (
           <motion.section key="forgot-password" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex min-h-screen flex-col py-7">
             <div className="relative flex min-h-11 items-center justify-center">
-              <button aria-label="Go back" onClick={() => { setDirection(-1); setMode("sign-in"); setLocalError(""); }} className="absolute left-0 grid h-11 w-11 place-items-center rounded-2xl bg-white/5 text-muted">
+              <button aria-label="Go back" onClick={() => {
+                if (onBackFromForgot) {
+                  onBackFromForgot();
+                  return;
+                }
+                setDirection(-1);
+                setMode("sign-in");
+                setLocalError("");
+              }} className="absolute left-0 grid h-11 w-11 place-items-center rounded-2xl bg-white/5 text-muted">
                 <ArrowLeft size={18} />
               </button>
             </div>
@@ -412,7 +434,7 @@ export function AuthScreen({ onSignIn, onSignUp, error, onSignedUp }) {
           <motion.section key="sign-in" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="grid min-h-screen place-items-center py-8">
             <div className="w-full">
               <div className="mb-8 text-center">
-                <img src={logo} alt="Hostio" className="mx-auto h-16 w-16 rounded-2xl object-cover" />
+                <img src={logo} alt="Hostrack" className="mx-auto h-16 w-16 rounded-2xl object-cover" />
                 <h1 className="mt-5 text-4xl font-extrabold tracking-tight">Welcome back</h1>
                 <p className="mt-2 text-sm font-semibold text-muted">Log in to manage your property</p>
               </div>
@@ -712,7 +734,7 @@ function PasswordInput({ id, visible, onToggle, showCheck = false, className = "
         onClick={onToggle}
         className={`absolute right-0 top-1/2 h-11 w-11 -translate-y-1/2 rounded-2xl transition-colors ${visible ? "text-accent" : "text-[#6B6B6B]"}`}
       >
-        {visible ? <EyeOff size={19} className="absolute right-3 top-1/2 -translate-y-1/2" /> : <Eye size={19} className="absolute right-3 top-1/2 -translate-y-1/2" />}
+        {visible ? <Eye size={19} className="absolute right-3 top-1/2 -translate-y-1/2" /> : <EyeOff size={19} className="absolute right-3 top-1/2 -translate-y-1/2" />}
       </button>
       <FieldCheck visible={showCheck} offsetClassName="right-12" />
     </div>
@@ -747,7 +769,7 @@ function PasswordStrength({ score }) {
     <div className="mt-3">
       <div className="grid grid-cols-3 gap-1.5">
         {[1, 2, 3].map((segment) => (
-          <div key={segment} className="h-2 overflow-hidden rounded-full bg-[#2A2A2A]">
+          <div key={segment} className="h-2 overflow-hidden rounded-full bg-border">
             <div className={`h-full rounded-full transition-[width,background-color] duration-200 ease-out ${activeFill}`} style={{ width: score >= segment ? "100%" : "0%" }} />
           </div>
         ))}
