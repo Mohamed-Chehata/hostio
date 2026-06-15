@@ -37,6 +37,7 @@ export function SettingsScreen({ currency, currencies, theme, subscription, tria
           label="Plan"
           value={subscriptionLabel(subscription, trialDaysRemaining)}
           valueDanger={subscription?.status === "expired" || subscription?.status === "canceled"}
+          multiline
         />
         {subscription?.status === "trialing" ? (
           <button onClick={onChoosePlan} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Choose a plan</button>
@@ -152,16 +153,20 @@ function SettingsSection({ title, danger = false, children }) {
   );
 }
 
-function SettingsRow({ icon: Icon, label, value, onClick, navigation = false, danger = false, valueDanger = false }) {
+function SettingsRow({ icon: Icon, label, value, onClick, navigation = false, danger = false, valueDanger = false, multiline = false }) {
   const content = (
     <>
-      <Icon className={danger ? "text-[#EF4444]" : "text-muted"} size={18} />
+      <Icon className={`shrink-0 ${danger ? "text-[#EF4444]" : "text-muted"}`} size={18} />
       <span className={`text-sm font-bold ${danger ? "text-[#EF4444]" : "text-white"}`}>{label}</span>
-      {value && <span className={`ml-auto max-w-[200px] truncate text-sm font-semibold ${valueDanger ? "text-[#EF4444]" : "text-muted"}`}>{value}</span>}
+      {value && (
+        <span className={`ml-auto text-sm font-semibold ${multiline ? "max-w-[190px] whitespace-normal break-words text-right leading-5" : "max-w-[200px] truncate"} ${valueDanger ? "text-[#EF4444]" : "text-muted"}`}>
+          {value}
+        </span>
+      )}
       {navigation && <ChevronRight className="ml-auto text-muted" size={17} />}
     </>
   );
-  const className = "flex min-h-14 w-full items-center gap-3 border-b border-white/5 px-4 text-left transition-transform duration-100 last:border-b-0 active:scale-[0.98]";
+  const className = `flex min-h-14 w-full gap-3 border-b border-white/5 px-4 text-left transition-transform duration-100 last:border-b-0 active:scale-[0.98] ${multiline ? "items-start py-4" : "items-center"}`;
   return onClick ? <button onClick={onClick} className={className}>{content}</button> : <div className={className}>{content}</div>;
 }
 
