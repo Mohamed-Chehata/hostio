@@ -54,7 +54,12 @@ export function stripeStatus(status) {
 
 export async function requireUser(req) {
   const authorization = req.headers.authorization || "";
-  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const body = parseBody(req);
+  const token = authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : typeof body.accessToken === "string"
+      ? body.accessToken
+      : "";
   if (!token) return null;
 
   const supabase = getSupabaseAdmin();

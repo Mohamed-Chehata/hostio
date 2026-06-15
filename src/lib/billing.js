@@ -29,7 +29,7 @@ async function billingRequest(path, body = {}) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ ...body, accessToken: token })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "Something went wrong");
