@@ -68,7 +68,21 @@ export function appUrl() {
 }
 
 export function sendJson(res, status, body) {
+  setCorsHeaders(res);
   res.status(status).json(body);
+}
+
+export function setCorsHeaders(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+export function handleOptions(req, res) {
+  if (req.method !== "OPTIONS") return false;
+  setCorsHeaders(res);
+  res.status(204).end();
+  return true;
 }
 
 export function parseBody(req) {

@@ -27,7 +27,7 @@ export function useToast() {
     setToast(null);
 
     requestAnimationFrame(() => {
-      const duration = durations[type] || 3000;
+      const duration = options.duration || durations[type] || 3000;
       setToast({ message, type, closing: false, duration, persistent: Boolean(options.persistent), id: Date.now() });
       if (options.persistent) return;
       closeTimer.current = setTimeout(() => {

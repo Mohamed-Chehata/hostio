@@ -1,6 +1,7 @@
-import { getSupabaseAdmin, parseBody, PLAN_LIMITS, requireUser, sendJson } from "./_lib/server.js";
+import { getSupabaseAdmin, handleOptions, parseBody, PLAN_LIMITS, requireUser, sendJson } from "./_lib/server.js";
 
 export default async function handler(req, res) {
+  if (handleOptions(req, res)) return;
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "Method not allowed" });

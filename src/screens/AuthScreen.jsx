@@ -41,17 +41,18 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
   const emailIsValid = validEmail(email);
   const signUpEmailConfirmed = emailIsValid;
   const passwordScore = getPasswordScore(password);
+  const passwordRequirementsMet = password.length >= 8 && hasNumberOrSymbol(password);
   const passwordsMatch = password.length > 0 && confirmPassword.length > 0 && password === confirmPassword;
   const showPasswordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   const canContinue = useMemo(() => {
     if (mode === "sign-in") return email.trim().length > 0 && password.length > 0;
     if (mode === "forgot-password") return emailIsValid;
-    if (mode === "reset-password") return passwordsMatch && passwordScore >= 2;
+    if (mode === "reset-password") return passwordsMatch && passwordRequirementsMet;
     if (step === 0) return signUpEmailConfirmed;
-    if (step === 1) return passwordsMatch && passwordScore >= 2;
+    if (step === 1) return passwordsMatch && passwordRequirementsMet;
     return propertyName.trim().length > 0;
-  }, [email, emailIsValid, mode, password.length, passwordScore, passwordsMatch, propertyName, signUpEmailConfirmed, step]);
+  }, [email, emailIsValid, mode, password.length, passwordRequirementsMet, passwordsMatch, propertyName, signUpEmailConfirmed, step]);
 
   useEffect(() => {
     if (!success) return;
@@ -300,10 +301,10 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-[390px] overflow-hidden bg-app px-5 text-white">
+    <main className="mx-auto h-[100dvh] max-h-[100dvh] max-w-[390px] overflow-hidden overscroll-none bg-app px-5 text-white">
       <AnimatePresence mode="wait" custom={direction}>
         {success ? (
-          <motion.section key="success" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="grid min-h-screen place-items-center text-center">
+          <motion.section key="success" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="grid h-full min-h-0 place-items-center text-center">
             <div>
               <svg className="mx-auto h-24 w-24 text-accent" viewBox="0 0 96 96" fill="none">
                 <motion.circle cx="48" cy="48" r="38" stroke="currentColor" strokeWidth="6" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45, ease: "easeOut" }} />
@@ -314,7 +315,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
             </div>
           </motion.section>
         ) : mode === "verify" ? (
-          <motion.section key="verify-email" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex min-h-screen flex-col justify-center py-8 text-center">
+          <motion.section key="verify-email" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex h-full min-h-0 flex-col justify-center py-8 text-center">
             <div className="flex flex-1 flex-col items-center justify-center">
               <EnvelopeIcon />
               <h1 className="mt-8 text-4xl font-extrabold tracking-tight">Check your email</h1>
@@ -357,7 +358,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
             backText="Wrong email? Go back"
           />
         ) : mode === "forgot-password" ? (
-          <motion.section key="forgot-password" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex min-h-screen flex-col py-7">
+          <motion.section key="forgot-password" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex h-full min-h-0 flex-col py-7">
             <div className="relative flex min-h-11 items-center justify-center">
               <button aria-label="Go back" onClick={() => {
                 if (onBackFromForgot) {
@@ -411,7 +412,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
             </form>
           </motion.section>
         ) : mode === "reset-password" ? (
-          <motion.section key="reset-password" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex min-h-screen flex-col py-7">
+          <motion.section key="reset-password" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex h-full min-h-0 flex-col py-7">
             <form onSubmit={updatePassword} className="flex flex-1 flex-col justify-center">
               <StepShell title="Choose a new password" subtitle="">
                 <PasswordFields
@@ -445,7 +446,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
             </form>
           </motion.section>
         ) : mode === "sign-in" ? (
-          <motion.section key="sign-in" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="grid min-h-screen place-items-center py-8">
+          <motion.section key="sign-in" custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="grid h-full min-h-0 place-items-center py-8">
             <div className="w-full">
               <div className="mb-8 text-center">
                 <img src={logo} alt="Hostrack" className="mx-auto h-16 w-16 rounded-2xl object-cover" />
@@ -488,7 +489,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
             </div>
           </motion.section>
         ) : (
-          <motion.section key={`sign-up-${step}`} custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex min-h-screen flex-col py-7">
+          <motion.section key={`sign-up-${step}`} custom={direction} variants={variants} initial="enter" animate="center" exit="exit" className="flex h-full min-h-0 flex-col py-7">
             <div className="relative flex min-h-11 items-center justify-center">
               {step > 0 && (
                 <button aria-label="Go back" onClick={goBack} className="absolute left-0 grid h-11 w-11 place-items-center rounded-2xl bg-white/5 text-muted">
@@ -611,9 +612,13 @@ function StepShell({ title, subtitle, children }) {
 function getPasswordScore(value) {
   let score = 0;
   if (value.length >= 8) score += 1;
-  if (/[0-9!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/']/.test(value)) score += 1;
+  if (hasNumberOrSymbol(value)) score += 1;
   if (value.length >= 12) score += 1;
   return score;
+}
+
+function hasNumberOrSymbol(value) {
+  return /[0-9!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/']/.test(value);
 }
 
 function AuthSubmitButton({ enabled, loading = false, className = "", children, type = "button" }) {
@@ -646,7 +651,7 @@ function AuthSubmitButton({ enabled, loading = false, className = "", children, 
 
 function EmailWaitingScreen({ email, title, subtitle, instructions, resendSeconds, submitting, error, onResend, onBack, backText }) {
   return (
-    <motion.section key={title + email} custom={1} variants={variants} initial="enter" animate="center" exit="exit" className="flex min-h-screen flex-col justify-center py-8 text-center">
+    <motion.section key={title + email} custom={1} variants={variants} initial="enter" animate="center" exit="exit" className="flex h-full min-h-0 flex-col justify-center py-8 text-center">
       <div className="flex flex-1 flex-col items-center justify-center">
         <EnvelopeIcon />
         <h1 className="mt-8 text-4xl font-extrabold tracking-tight">{title}</h1>
@@ -705,6 +710,7 @@ function PasswordFields({
           onChange={(event) => setPassword(event.target.value)}
           placeholder={passwordPlaceholder}
         />
+        <PasswordRequirements password={password} />
         <PasswordStrength score={passwordScore} />
       </div>
       <div>
@@ -729,6 +735,39 @@ function PasswordFields({
           <span>Passwords don't match</span>
         </motion.div>
       </div>
+    </div>
+  );
+}
+
+function PasswordRequirements({ password }) {
+  const requirements = [
+    { label: "At least 8 characters", met: password.length >= 8 },
+    { label: "Contains a number or symbol", met: hasNumberOrSymbol(password) },
+    { label: "12+ characters for extra strength", met: password.length >= 12 }
+  ];
+
+  return (
+    <div className="mt-3 space-y-1">
+      {requirements.map((requirement) => (
+        <div key={requirement.label} className="flex items-center gap-2 text-xs">
+          <span
+            className={`grid h-4 w-4 shrink-0 place-items-center rounded-full transition-colors duration-200 ease-out ${
+              requirement.met ? "bg-[#4ADE80]" : "bg-[#6B6B6B]"
+            }`}
+          >
+            <Check
+              size={10}
+              strokeWidth={3}
+              className={`text-[#0A0A0A] transition-transform duration-150 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                requirement.met ? "scale-100" : "scale-0"
+              }`}
+            />
+          </span>
+          <span className={`transition-colors duration-150 ${requirement.met ? "text-white" : "text-muted"}`}>
+            {requirement.label}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

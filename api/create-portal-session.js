@@ -2,12 +2,14 @@ import {
   appUrl,
   getStripe,
   getSupabaseAdmin,
+  handleOptions,
   parseBody,
   requireUser,
   sendJson
 } from "./_lib/server.js";
 
 export default async function handler(req, res) {
+  if (handleOptions(req, res)) return;
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "Method not allowed" });

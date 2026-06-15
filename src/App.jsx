@@ -89,6 +89,9 @@ export default function App() {
   const transitionTimer = useRef(null);
   const loadingStartedAt = useRef(null);
   const previousSession = useRef(auth.session);
+  const screenHistory = useRef([]);
+  const exitBackPressedAt = useRef(0);
+  const backGuardReady = useRef(false);
   const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || { month: dashboardMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
   const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || { month: expensesMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
   const dashboardBookings = data.bookingsByMonth[dashboardMonth] || [];
@@ -238,8 +241,138 @@ export default function App() {
     if (!wasSignedOut || !auth.session) return;
     sessionStorage.setItem("activeTab", "dashboard");
     sessionStorage.removeItem("statsPageIndex");
+    screenHistory.current = [];
     setScreen("dashboard");
   }, [auth.session]);
+
+  useEffect(() => {
+    if (!revealContent) return undefined;
+    if (!backGuardReady.current) {
+      window.history.replaceState({ hostrack: true }, "", window.location.href);
+      window.history.pushState({ hostrackBackGuard: true }, "", window.location.href);
+      backGuardReady.current = true;
+    }
+
+    function restoreBackGuard() {
+      window.history.pushState({ hostrackBackGuard: true }, "", window.location.href);
+    }
+
+    function blurFocusedInput() {
+      const element = document.activeElement;
+      if (!element) return false;
+      const tagName = element.tagName?.toLowerCase();
+      const editable = tagName === "input" || tagName === "textarea" || element.isContentEditable;
+      if (!editable) return false;
+      element.blur();
+      return true;
+    }
+
+    function closeTopSheet() {
+      if (syncReviewOpen) {
+        setSyncReviewOpen(false);
+        return true;
+      }
+      if (deleteCandidate) {
+        cancelDelete();
+        return true;
+      }
+      if (cancellationCandidate) {
+        setCancellationCandidate(null);
+        return true;
+      }
+      if (editingSheet) {
+        setEditingSheet(null);
+        return true;
+      }
+      if (deletedProperty) {
+        setDeletedProperty(null);
+        return true;
+      }
+      if (propertyLimitOpen) {
+        setPropertyLimitOpen(false);
+        return true;
+      }
+      if (addingProperty) {
+        setAddingProperty(false);
+        return true;
+      }
+      if (propertyAction) {
+        setPropertyAction(null);
+        return true;
+      }
+      if (propertiesOpen) {
+        setPropertiesOpen(false);
+        return true;
+      }
+      if (paywallOpen) {
+        setPaywallOpen(false);
+        return true;
+      }
+      if (openSwipeId) {
+        setOpenSwipeId(null);
+        return true;
+      }
+      return false;
+    }
+
+    function goBackInsideApp() {
+      const previous = screenHistory.current.pop();
+      if (!previous || previous === screen) return false;
+      navigate(previous, { fromBack: true });
+      return true;
+    }
+
+    function handleBackPress() {
+      if (blurFocusedInput()) {
+        restoreBackGuard();
+        return;
+      }
+
+      if (closeTopSheet()) {
+        restoreBackGuard();
+        return;
+      }
+
+      if (screen !== "dashboard" && goBackInsideApp()) {
+        restoreBackGuard();
+        return;
+      }
+
+      if (screen !== "dashboard") {
+        navigate("dashboard", { fromBack: true });
+        restoreBackGuard();
+        return;
+      }
+
+      const now = Date.now();
+      if (now - exitBackPressedAt.current < 2000) {
+        exitBackPressedAt.current = 0;
+        setTimeout(() => window.history.back(), 0);
+        return;
+      }
+      exitBackPressedAt.current = now;
+      showToast("Press back again to exit", "warning", { duration: 2000 });
+      restoreBackGuard();
+    }
+
+    window.addEventListener("popstate", handleBackPress);
+    return () => window.removeEventListener("popstate", handleBackPress);
+  }, [
+    addingProperty,
+    cancellationCandidate,
+    deleteCandidate,
+    deletedProperty,
+    editingSheet,
+    openSwipeId,
+    paywallOpen,
+    propertiesOpen,
+    propertyAction,
+    propertyLimitOpen,
+    revealContent,
+    screen,
+    showToast,
+    syncReviewOpen
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -373,10 +506,13 @@ export default function App() {
     }, 1150);
   }
 
-  function navigate(next) {
+  function navigate(next, options = {}) {
     if (next === "add" && activePropertyLocked) {
       showToast("Unlock this property to make changes", "warning");
       return;
+    }
+    if (!options.fromBack && screen !== next && tabScreens.has(screen) && tabScreens.has(next)) {
+      screenHistory.current = [...screenHistory.current.filter((item) => item !== next), screen].slice(-12);
     }
     setEditingSheet(null);
     setOpenSwipeId(null);
