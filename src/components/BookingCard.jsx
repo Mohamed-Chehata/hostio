@@ -14,7 +14,8 @@ export function BookingCard({
   onCloseSwipe,
   isOpen = false,
   deletionStage,
-  compact = false
+  compact = false,
+  readOnly = false
 }) {
   const startX = useRef(0);
   const startOffset = useRef(0);
@@ -53,12 +54,12 @@ export function BookingCard({
   }
 
   function changePaymentOverride(paymentOverride) {
-    if (!onPaymentOverride || deletionStage) return;
+    if (readOnly || !onPaymentOverride || deletionStage) return;
     onPaymentOverride(booking.id, paymentOverride);
   }
 
   function pointerDown(event) {
-    if (deletionStage) return;
+    if (readOnly || deletionStage) return;
     startX.current = event.clientX;
     startOffset.current = isOpen ? -88 : 0;
     moved.current = false;
@@ -66,7 +67,7 @@ export function BookingCard({
   }
 
   function pointerMove(event) {
-    if (deletionStage || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    if (readOnly || deletionStage || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
     const distance = event.clientX - startX.current;
     if (Math.abs(distance) > 8) moved.current = true;
     if (distance < 0) setShowDeleteZone(true);
@@ -74,7 +75,7 @@ export function BookingCard({
   }
 
   function pointerUp(event) {
-    if (deletionStage) return;
+    if (readOnly || deletionStage) return;
     const distance = event.clientX - startX.current;
     if (startOffset.current + distance < -54) {
       onOpenSwipe?.(booking.id);
@@ -124,7 +125,7 @@ export function BookingCard({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="truncate text-sm font-bold">{booking.guestName}</h3>
-              {cancelled ? <span className="rounded-full bg-[#F0F0F0] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] dark:bg-[#2A2A2A] dark:text-[#9A9A9A]">Cancelled</span> : <PaymentStatusControl booking={booking} onChange={changePaymentOverride} onPulse={pulseStatus} />}
+              {cancelled ? <span className="rounded-full bg-[#F0F0F0] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] dark:bg-[#2A2A2A] dark:text-[#9A9A9A]">Cancelled</span> : <PaymentStatusControl booking={booking} onChange={changePaymentOverride} onPulse={pulseStatus} disabled={readOnly} />}
             </div>
             <p className={`mt-1 text-xs text-muted ${cancelled ? "line-through decoration-red-300/70" : ""}`}>{dateLabel(booking.checkIn)} &rarr; {dateLabel(booking.checkOut)}{!compact && <> &middot; {booking.nights} nights</>}</p>
           </div>

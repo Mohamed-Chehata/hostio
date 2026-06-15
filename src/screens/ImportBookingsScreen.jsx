@@ -36,6 +36,8 @@ export function ImportBookingsScreen({
   formatCurrency,
   onBack,
   onAddProperty,
+  canAddProperty = true,
+  onPropertyLimit,
   onCheckConflicts,
   onImport,
   onViewBookings
@@ -211,6 +213,10 @@ export function ImportBookingsScreen({
   async function createProperty() {
     const name = newPropertyName.trim();
     if (!name || name.length > 100 || creatingProperty) return;
+    if (!canAddProperty) {
+      onPropertyLimit?.();
+      return;
+    }
     setCreatingProperty(true);
     const property = await onAddProperty(name);
     setCreatingProperty(false);
@@ -258,7 +264,7 @@ export function ImportBookingsScreen({
               })}
             </div>
             {!addingProperty ? (
-              <button onClick={() => setAddingProperty(true)} className="mt-3 flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left font-bold text-accent transition-colors hover:bg-white/[0.03]">
+              <button onClick={() => canAddProperty ? setAddingProperty(true) : onPropertyLimit?.()} className="mt-3 flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left font-bold text-accent transition-colors hover:bg-white/[0.03]">
                 <Plus size={18} /> Add new property
               </button>
             ) : (

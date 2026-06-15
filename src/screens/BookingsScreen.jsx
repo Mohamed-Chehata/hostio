@@ -5,8 +5,9 @@ import { Skeleton } from "../components/Skeleton";
 import { monthKey, monthLabel, moveMonth } from "../utils/monthUtils";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { OfflineUnavailable } from "../components/OfflineUnavailable";
+import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 
-export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", onOpenProperties, bookings, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, formatCurrency, onSelect, onRequestDelete, onPaymentOverride, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages }) {
+export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", onOpenProperties, bookings, locked = false, onUpgrade, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, formatCurrency, onSelect, onRequestDelete, onPaymentOverride, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages }) {
   const visible = bookings.filter((booking) => monthKey(booking.checkIn) === month).sort((a, b) => a.checkIn.localeCompare(b.checkIn));
   const showSkeleton = !isInitialized || isLoading;
 
@@ -18,6 +19,7 @@ export function BookingsScreen({ month, setMonth, activePropertyName = "My Prope
       </button>
       <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
       <h1 className="text-2xl font-extrabold">Bookings</h1>
+      {locked && <div className="mt-4"><LockedPropertyBanner onUpgrade={onUpgrade} /></div>}
 
       <MonthNavigator className="my-6 rounded-2xl bg-panel p-2" label={monthLabel(month)} onPrevious={() => setMonth(moveMonth(month, -1))} onNext={() => setMonth(moveMonth(month, 1))} />
 
@@ -28,7 +30,7 @@ export function BookingsScreen({ month, setMonth, activePropertyName = "My Prope
       ) : isInitialized && visible.length ? (
         <>
           <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">{visible.length} reservations</p>
-          <div className="space-y-2">{visible.map((booking) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} onClick={() => onSelect(booking)} onRequestDelete={onRequestDelete} onPaymentOverride={onPaymentOverride} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} deletionStage={deletionStages[booking.id]} />)}</div>
+          <div className="space-y-2">{visible.map((booking) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} onClick={() => onSelect(booking)} onRequestDelete={onRequestDelete} onPaymentOverride={onPaymentOverride} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} deletionStage={deletionStages[booking.id]} readOnly={locked} />)}</div>
         </>
       ) : (
         <div className="flex min-h-[420px] flex-col items-center justify-center text-center">

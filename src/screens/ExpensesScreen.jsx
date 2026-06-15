@@ -10,6 +10,7 @@ import { cn } from "../lib/utils";
 import { monthLabel, moveMonth } from "../utils/monthUtils";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { OfflineUnavailable } from "../components/OfflineUnavailable";
+import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
@@ -30,7 +31,7 @@ function dateHeading(value) {
   return new Date(`${value}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
-export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "My Property", onOpenProperties, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, currency, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency, onUpdateCostLabel, onUpdateFixedCost, onAddExpense, onUpdateExpense, onDeleteExpense }) {
+export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "My Property", onOpenProperties, locked = false, onUpgrade, onLockedAction, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, currency, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency, onUpdateCostLabel, onUpdateFixedCost, onAddExpense, onUpdateExpense, onDeleteExpense }) {
   const [costDrafts, setCostDrafts] = useState({ rent: "", cleaning: "" });
   const [addingExpense, setAddingExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -92,6 +93,7 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
         <h1 className="text-2xl font-extrabold">Expenses</h1>
         <p className="mt-1 text-sm font-bold text-accent">{monthLabel(stats.month)}</p>
       </header>
+      {locked && <div className="mt-4"><LockedPropertyBanner onUpgrade={onUpgrade} /></div>}
 
       <MonthNavigator
         className="my-6 rounded-2xl bg-panel p-2"
@@ -117,9 +119,10 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
               currency={currency}
               formatCurrency={formatCurrency}
               draftValue={costDrafts.rent}
-              onDraftChange={(value) => setCostDraft("rent", value)}
-              onAdd={() => addFixedCost("rent")}
-              onRename={(label) => onUpdateCostLabel("rent", label)}
+              onDraftChange={(value) => locked ? onLockedAction() : setCostDraft("rent", value)}
+              onAdd={() => locked ? onLockedAction() : addFixedCost("rent")}
+              onRename={(label) => locked ? onLockedAction() : onUpdateCostLabel("rent", label)}
+              disabled={locked}
               pending={Boolean(stats.pendingSync)}
             />
             <CostAddRow
@@ -130,9 +133,10 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
               currency={currency}
               formatCurrency={formatCurrency}
               draftValue={costDrafts.cleaning}
-              onDraftChange={(value) => setCostDraft("cleaning", value)}
-              onAdd={() => addFixedCost("cleaning")}
-              onRename={(label) => onUpdateCostLabel("cleaning", label)}
+              onDraftChange={(value) => locked ? onLockedAction() : setCostDraft("cleaning", value)}
+              onAdd={() => locked ? onLockedAction() : addFixedCost("cleaning")}
+              onRename={(label) => locked ? onLockedAction() : onUpdateCostLabel("cleaning", label)}
+              disabled={locked}
               pending={Boolean(stats.pendingSync)}
             />
             <RandomExpensesCard
@@ -141,8 +145,8 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
               formatCurrency={formatCurrency}
               newExpenseId={newExpenseId}
               removingExpenseIds={removingExpenses}
-              onAdd={() => setAddingExpense(true)}
-              onEdit={setEditingExpense}
+              onAdd={() => locked ? onLockedAction() : setAddingExpense(true)}
+              onEdit={(expense) => locked ? onLockedAction() : setEditingExpense(expense)}
               isLoading={showSkeleton}
             />
           </>
@@ -160,7 +164,7 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
                 <div className="sticky top-0 z-10 -mx-1 mb-2 rounded-xl bg-app/95 px-1 py-1 text-[11px] font-bold uppercase tracking-wider text-muted backdrop-blur">{dateHeading(date)}</div>
                 <div className="space-y-2">
                   {entries.map((expense) => (
-                    <button key={`history-${expense.id}`} onClick={() => setEditingExpense(expense)} disabled={Boolean(removingExpenses[expense.id])} className={cn("relative flex w-full items-center justify-between rounded-2xl bg-panel px-4 py-3 text-left transition active:scale-[0.98]", removingExpenses[expense.id] && "expense-row-removing")}>
+                    <button key={`history-${expense.id}`} onClick={() => locked ? onLockedAction() : setEditingExpense(expense)} disabled={Boolean(removingExpenses[expense.id])} className={cn("relative flex w-full items-center justify-between rounded-2xl bg-panel px-4 py-3 text-left transition active:scale-[0.98]", removingExpenses[expense.id] && "expense-row-removing")}>
                       {expense.pendingSync && <span aria-label="Waiting to sync" className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent" />}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold">{expense.description}</p>
@@ -237,7 +241,7 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
   );
 }
 
-function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftValue, onDraftChange, onAdd, onRename, pending }) {
+function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftValue, onDraftChange, onAdd, onRename, pending, disabled = false }) {
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(label);
   const [amountError, setAmountError] = useState("");
@@ -295,7 +299,7 @@ function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftV
             ) : (
               <div className="flex items-center gap-1">
                 <p className="text-xs font-bold uppercase tracking-wider">{label}</p>
-                <button aria-label={`Rename ${label}`} onClick={() => setEditingLabel(true)} className="grid h-7 min-h-7 w-7 place-items-center rounded-xl text-muted"><Pencil size={11} /></button>
+                <button aria-label={`Rename ${label}`} onClick={() => disabled ? onRename(label) : setEditingLabel(true)} className="grid h-7 min-h-7 w-7 place-items-center rounded-xl text-muted"><Pencil size={11} /></button>
               </div>
             )}
             <p className="mt-0.5 text-[11px] font-semibold normal-case tracking-normal text-muted">
@@ -309,12 +313,13 @@ function CostAddRow({ icon: Icon, label, value, currency, formatCurrency, draftV
             currency={currency}
             value={draftValue}
             onChange={onDraftChange}
+            disabled={disabled}
             externalError={amountError}
             onValidityChange={(_, message) => setAmountError(message)}
             className="max-w-[108px]"
             inputClassName="pr-3 text-right text-sm font-extrabold"
           />
-          <button aria-label={`Save ${label}`} disabled={draftValue === ""} onClick={saveAmount} className={cn("h-11 rounded-2xl px-4 text-sm font-extrabold transition active:scale-[0.98]", draftValue === "" ? "bg-white/5 text-muted" : "bg-accent text-ink")}>Save</button>
+          <button aria-label={`Save ${label}`} disabled={draftValue === "" || disabled} onClick={disabled ? onAdd : saveAmount} className={cn("h-11 rounded-2xl px-4 text-sm font-extrabold transition active:scale-[0.98]", draftValue === "" || disabled ? "bg-white/5 text-muted" : "bg-accent text-ink")}>Save</button>
         </div>
       </div>
     </Card>

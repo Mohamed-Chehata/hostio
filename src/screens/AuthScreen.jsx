@@ -14,6 +14,7 @@ const variants = {
 
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
 const RESET_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}/reset-password`;
+const SIGNUP_SUCCESS_KEY = "hostrack-signup-success";
 
 function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -83,6 +84,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
 
   useEffect(() => {
     function handleEmailVerified(event) {
+      sessionStorage.removeItem(SIGNUP_SUCCESS_KEY);
       setPropertyName(event.detail?.propertyName || propertyName || "My Property");
       setSuccessTitle("You're all set");
       setSuccessSubtitle(event.detail?.propertyName || propertyName || "My Property");
@@ -93,6 +95,18 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
     window.addEventListener("hostrack:email-verified", handleEmailVerified);
     return () => window.removeEventListener("hostrack:email-verified", handleEmailVerified);
   }, [propertyName]);
+
+  useEffect(() => {
+    const completedPropertyName = sessionStorage.getItem(SIGNUP_SUCCESS_KEY);
+    if (!completedPropertyName) return;
+    sessionStorage.removeItem(SIGNUP_SUCCESS_KEY);
+    setPropertyName(completedPropertyName);
+    setSuccessTitle("You're all set");
+    setSuccessSubtitle(completedPropertyName);
+    setDirection(1);
+    setMode("sign-up");
+    setSuccess(true);
+  }, []);
 
   useEffect(() => {
     if (!verificationEmail || resendSeconds <= 0) return undefined;

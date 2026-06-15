@@ -1468,6 +1468,7 @@ export function useAppData(user, months = []) {
   return {
     properties,
     baseInitialized,
+    refreshProperties: fetchPropertiesAndSettings,
     activeProperty,
     activePropertyId,
     setActivePropertyId,

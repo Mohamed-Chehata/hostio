@@ -36,7 +36,8 @@ export function MoneyInput({
   externalError = "",
   className = "",
   inputClassName = "",
-  onValidityChange
+  onValidityChange,
+  disabled = false
 }) {
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState("");
@@ -85,6 +86,7 @@ export function MoneyInput({
           inputMode="decimal"
           placeholder={placeholder}
           value={value}
+          disabled={disabled}
           onChange={handleChange}
           onBlur={handleBlur}
         />

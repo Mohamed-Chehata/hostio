@@ -2,8 +2,9 @@ import { useState } from "react";
 import { ArrowLeft, Check, ChevronRight, Coins, CreditCard, FileUp, KeyRound, LogOut, Mail, Trash2 } from "lucide-react";
 import { BottomSheet } from "../components/BottomSheet";
 import { Button, Card, Input } from "../components/ui";
+import { PLANS } from "../config/pricing";
 
-export function SettingsScreen({ currency, currencies, theme, subscription, trialDaysRemaining, updateTheme, updateCurrency, onCurrencyUpdated, email, onImportData, onChangePassword, onSignOut, onDeleteAccount, onBack }) {
+export function SettingsScreen({ currency, currencies, theme, subscription, trialDaysRemaining, updateTheme, updateCurrency, onCurrencyUpdated, email, onImportData, onChoosePlan, onManageSubscription, onChangePassword, onSignOut, onDeleteAccount, onBack }) {
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
@@ -37,6 +38,11 @@ export function SettingsScreen({ currency, currencies, theme, subscription, tria
           value={subscriptionLabel(subscription, trialDaysRemaining)}
           valueDanger={subscription?.status === "expired" || subscription?.status === "canceled"}
         />
+        {subscription?.status === "trialing" ? (
+          <button onClick={onChoosePlan} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Choose a plan</button>
+        ) : subscription?.status === "active" ? (
+          <button onClick={onManageSubscription} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Manage subscription</button>
+        ) : null}
       </SettingsSection>
 
       <SettingsSection title="Appearance">
@@ -88,13 +94,15 @@ function subscriptionLabel(subscription, trialDaysRemaining) {
     return `Free trial — ${trialDaysRemaining} ${trialDaysRemaining === 1 ? "day" : "days"} remaining`;
   }
   if (subscription?.status === "active") {
-    if (!subscription.current_period_end) return "Active subscription";
+    const plan = PLANS[subscription.plan];
+    const planLabel = plan ? `${plan.name} — $${plan.price}/month` : "Active subscription";
+    if (!subscription.current_period_end) return planLabel;
     const renewalDate = new Date(subscription.current_period_end).toLocaleDateString([], {
       month: "short",
       day: "numeric",
       year: "numeric"
     });
-    return `Active — renews ${renewalDate}`;
+    return `${planLabel} · renews ${renewalDate}`;
   }
   return "Inactive";
 }

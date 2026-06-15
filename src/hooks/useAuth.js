@@ -5,6 +5,8 @@ import { PRICING } from "../config/pricing";
 import "../utils/storageMigration";
 
 const PENDING_SIGNUP_KEY = "hostrackPendingSignup";
+const PENDING_PROPERTY_NAME_KEY = "hostrack-pending-property-name";
+const SIGNUP_SUCCESS_KEY = "hostrack-signup-success";
 const PASSWORD_RECOVERY_KEY = "hostrackPasswordRecovery";
 const VERIFIED_EVENT = "hostrack:email-verified";
 const PASSWORD_RECOVERY_EVENT = "hostrack:password-recovery";
@@ -24,12 +26,13 @@ function readPendingSignup() {
   }
 }
 
-function writePendingSignup(email, propertyName) {
-  localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ email, propertyName }));
+function writePendingSignup(email) {
+  localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ email }));
 }
 
 function clearPendingSignup() {
   localStorage.removeItem(PENDING_SIGNUP_KEY);
+  localStorage.removeItem(PENDING_PROPERTY_NAME_KEY);
 }
 
 function getPendingSignupForUser(user) {
@@ -120,9 +123,12 @@ export function useAuth() {
     async function revealVerifiedSession(nextSession, pendingSignup) {
       if (hasInitialized.current) return;
       hasInitialized.current = true;
-      const propertyName = nextSession.user.user_metadata?.property_name || pendingSignup?.propertyName || "My Property";
+      const propertyName = localStorage.getItem(PENDING_PROPERTY_NAME_KEY)
+        || nextSession.user.user_metadata?.property_name
+        || "My Property";
       try {
         await initNewUser(nextSession.user.id, propertyName);
+        sessionStorage.setItem(SIGNUP_SUCCESS_KEY, propertyName);
         clearPendingSignup();
         notifyEmailVerified(propertyName);
         clearTimeout(revealSessionTimer.current);
@@ -238,20 +244,23 @@ export function useAuth() {
 
   async function signUp(email, password, propertyName = "My Property") {
     setAuthError(null);
+    const pendingPropertyName = propertyName.trim() || "My Property";
+    localStorage.setItem(PENDING_PROPERTY_NAME_KEY, pendingPropertyName);
+    writePendingSignup(email);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { property_name: propertyName }
+        data: { property_name: pendingPropertyName }
       }
     });
     if (error) {
+      clearPendingSignup();
       logError(error);
       setAuthError(getAuthError(error));
       throw error;
     }
-    writePendingSignup(email, propertyName);
     return data;
   }
 

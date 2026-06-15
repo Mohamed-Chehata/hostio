@@ -6,9 +6,10 @@ import { Skeleton, SkeletonList } from "../components/Skeleton";
 import { Card } from "../components/ui";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { OfflineUnavailable } from "../components/OfflineUnavailable";
+import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 import { monthLabel } from "../utils/monthUtils";
 
-export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyName = "My Property", onMonthChange, onOpenExpenses, onSeeAllBookings, onEditBooking, onRequestDelete, onPaymentOverride, onRetry, onUpgrade, onDismissTrialBanner, trialDaysRemaining, showTrialBanner = false, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages, revenueAnimation, revenueDirection, stats, bookings, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency }) {
+export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyName = "My Property", onMonthChange, onOpenExpenses, onSeeAllBookings, onEditBooking, onRequestDelete, onPaymentOverride, onRetry, onUpgrade, locked = false, onDismissTrialBanner, trialDaysRemaining, showTrialBanner = false, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages, revenueAnimation, revenueDirection, stats, bookings, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency }) {
   const showSkeleton = !isInitialized || isLoading;
   const recent = [...bookings].sort((a, b) => b.checkIn.localeCompare(a.checkIn)).slice(0, 3);
   const quickStats = [
@@ -47,6 +48,7 @@ export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyNa
         </div>
       </header>
 
+      {locked && <LockedPropertyBanner onUpgrade={onUpgrade} />}
       {showTrialBanner && (
         <div className="mb-4 flex items-center gap-2 rounded-2xl bg-accent px-4 py-3 text-xs font-extrabold text-ink">
           <span className="flex-1">
@@ -123,7 +125,7 @@ export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyNa
         {showSkeleton ? (
           <SkeletonList className="h-[94px]" />
         ) : isInitialized && recent.length ? (
-          <div className="space-y-2">{recent.map((booking) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} compact onClick={() => onEditBooking(booking)} onRequestDelete={onRequestDelete} onPaymentOverride={onPaymentOverride} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} deletionStage={deletionStages[booking.id]} />)}</div>
+          <div className="space-y-2">{recent.map((booking) => <BookingCard key={booking.id} booking={booking} formatCurrency={formatCurrency} compact onClick={() => onEditBooking(booking)} onRequestDelete={onRequestDelete} onPaymentOverride={onPaymentOverride} isOpen={openSwipeId === booking.id} onOpenSwipe={onOpenSwipe} onCloseSwipe={onCloseSwipe} deletionStage={deletionStages[booking.id]} readOnly={locked} />)}</div>
         ) : (
           <div className="rounded-2xl bg-panel px-4 py-7 text-center text-muted">
             <CalendarDays className="mx-auto text-accent" size={24} />

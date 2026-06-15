@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, LoaderCircle, LockKeyhole, Pencil, Plus, Trash2 } from "lucide-react";
 import { BottomSheet } from "./BottomSheet";
 import { Button, Input } from "./ui";
 
@@ -49,7 +49,10 @@ export function PropertySelectorSheet({ properties, activePropertyId, deletingPr
             }`}
           >
             <button onClick={() => selectProperty(property)} className="flex min-h-14 min-w-0 flex-1 items-center justify-between gap-3 text-left">
-              <span className="truncate text-sm font-extrabold">{property.name}</span>
+              <span className="flex min-w-0 items-center gap-2 truncate text-sm font-extrabold">
+                {property.is_locked && <LockKeyhole size={14} className="shrink-0 text-muted" />}
+                <span className="truncate">{property.name}</span>
+              </span>
               {property.id === activePropertyId && <Check size={17} className="shrink-0 text-accent" />}
             </button>
           </div>

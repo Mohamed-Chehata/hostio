@@ -5,7 +5,7 @@ import { cn } from "../lib/utils";
 import { effectivePaymentStatus, isPaymentOverridden } from "../utils/paymentStatus";
 import { Badge } from "./ui";
 
-export function PaymentStatusControl({ booking, onChange, onPulse, className }) {
+export function PaymentStatusControl({ booking, onChange, onPulse, className, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [animating, setAnimating] = useState(false);
@@ -68,7 +68,7 @@ export function PaymentStatusControl({ booking, onChange, onPulse, className }) 
         status={status}
         overridden={overridden}
         animating={animating}
-        onClick={() => {
+        onClick={disabled ? undefined : () => {
           if (open) closeMenu();
           else setOpen(true);
         }}

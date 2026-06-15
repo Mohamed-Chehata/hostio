@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 function calculateAccess(subscription) {
@@ -22,39 +22,46 @@ export function useSubscription(user) {
   const [resolvedUserId, setResolvedUserId] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
+  const fetchSubscription = useCallback(async () => {
     if (!user?.id) {
       setSubscription(null);
       setResolvedUserId(null);
       setError(null);
-      return undefined;
+      return null;
     }
 
     setError(null);
-
-    supabase
+    const { data, error: subscriptionError } = await supabase
       .from("subscriptions")
-      .select("id,user_id,status,trial_ends_at,current_period_end")
+      .select("id,user_id,status,trial_ends_at,current_period_end,plan,needs_property_selection,stripe_customer_id")
       .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data, error: subscriptionError }) => {
-        if (cancelled) return;
-        if (subscriptionError) {
-          if (import.meta.env.DEV) console.error(subscriptionError.message);
-          setError(subscriptionError);
-          setSubscription(null);
-        } else {
-          setSubscription(data);
-        }
-        setResolvedUserId(user.id);
-      });
+      .maybeSingle();
+    if (subscriptionError) {
+      if (import.meta.env.DEV) console.error(subscriptionError.message);
+      setError(subscriptionError);
+      setSubscription(null);
+    } else {
+      setSubscription(data);
+    }
+    setResolvedUserId(user.id);
+    return data;
+  }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      fetchSubscription();
+      return undefined;
+    }
+    fetchSubscription().then((data) => {
+      if (cancelled) return;
+      return data;
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [fetchSubscription, user?.id]);
 
   const isResolved = !user?.id || resolvedUserId === user.id;
   const currentSubscription = isResolved ? subscription : null;
@@ -71,6 +78,7 @@ export function useSubscription(user) {
     trialDaysRemaining,
     isLoading: Boolean(user?.id) && !isResolved,
     isResolved,
-    error
+    error,
+    refetch: fetchSubscription
   };
 }

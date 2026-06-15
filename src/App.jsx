@@ -8,6 +8,8 @@ import { CancellationPayoutSheet } from "./components/CancellationPayoutSheet";
 import { DeleteBookingSheet } from "./components/DeleteBookingSheet";
 import { AddPropertySheet, PropertyActionSheet, PropertyDeletedSheet, PropertySelectorSheet } from "./components/PropertySheets";
 import { PullToRefresh } from "./components/PullToRefresh";
+import { PwaUpdateBanner } from "./components/PwaUpdateBanner";
+import { PropertyLimitSheet, PropertySelectionScreen } from "./components/SubscriptionFlows";
 import { SplashScreen } from "./components/SplashScreen";
 import { Toast } from "./components/Toast";
 import { SyncFailuresSheet } from "./components/SyncFailuresSheet";
@@ -16,11 +18,14 @@ import { useAppData } from "./hooks/useAppData";
 import { useAuth } from "./hooks/useAuth";
 import { useSubscription } from "./hooks/useSubscription";
 import { useToast } from "./hooks/useToast";
+import { confirmPropertySelection, openBillingPortal, startCheckout } from "./lib/billing";
 import { supabase } from "./lib/supabase";
+import { PLANS } from "./config/pricing";
 import { AddBookingScreen } from "./screens/AddBookingScreen";
 import { AllPropertiesScreen } from "./screens/AllPropertiesScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BookingsScreen } from "./screens/BookingsScreen";
+import { CheckoutStatusScreen } from "./screens/CheckoutStatusScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
 import { ExpensesScreen } from "./screens/ExpensesScreen";
 import { ImportBookingsScreen } from "./screens/ImportBookingsScreen";
@@ -44,8 +49,15 @@ export default function App() {
   const [recoveryMode, setRecoveryMode] = useState(() => window.location.pathname === "/reset-password" || window.location.hash.includes("type=recovery"));
   const [accountTransition, setAccountTransition] = useState(null);
   const [authAction, setAuthAction] = useState(null);
+  const [paywallOpen, setPaywallOpen] = useState(() => new URLSearchParams(window.location.search).get("checkout") === "cancel");
+  const [propertyLimitOpen, setPropertyLimitOpen] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState(() => {
+    const checkout = new URLSearchParams(window.location.search).get("checkout");
+    return checkout === "success" ? "pending" : null;
+  });
   const [syncReviewOpen, setSyncReviewOpen] = useState(false);
   const [screen, setScreen] = useState(() => {
+    if (window.location.pathname === "/settings") return "settings";
     const saved = sessionStorage.getItem("activeTab");
     return tabScreens.has(saved) ? saved : "dashboard";
   });
@@ -80,6 +92,9 @@ export default function App() {
   const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || { month: dashboardMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
   const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || { month: expensesMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
   const dashboardBookings = data.bookingsByMonth[dashboardMonth] || [];
+  const activePropertyLocked = Boolean(data.activeProperty?.is_locked);
+  const currentPlan = subscription.subscription?.plan;
+  const currentPlanLimit = PLANS[currentPlan]?.propertyLimit ?? Infinity;
   const authenticatedStateReady = subscription.isResolved
     && (!subscription.hasAccess || data.baseInitialized);
   const rawAppReady = !auth.isAuthLoading
@@ -104,6 +119,58 @@ export default function App() {
     timer = setTimeout(() => setLoadingFloorComplete(true), remaining);
     return () => clearTimeout(timer);
   }, [loadingFloorComplete, rawAppReady, revealContent]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "cancel") return;
+    params.delete("checkout");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, []);
+
+  useEffect(() => {
+    if (checkoutStatus !== "pending" || !auth.user?.id) return undefined;
+    let cancelled = false;
+    const deadline = Date.now() + 10000;
+
+    async function poll() {
+      const latest = await subscription.refetch();
+      if (cancelled) return;
+      if (latest?.status === "active") {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("checkout");
+        const query = params.toString();
+        window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+        setCheckoutStatus("complete");
+        return;
+      }
+      const remaining = deadline - Date.now();
+      if (remaining > 0) setTimeout(poll, Math.min(1500, remaining));
+      else {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("checkout");
+        window.history.replaceState({}, "", window.location.pathname);
+        setCheckoutStatus(null);
+        setPaywallOpen(true);
+      }
+    }
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.user?.id, checkoutStatus, subscription.refetch]);
+
+  useEffect(() => {
+    if (checkoutStatus !== "complete") return undefined;
+    const timer = setTimeout(() => {
+      setCheckoutStatus(null);
+      setPaywallOpen(false);
+      sessionStorage.setItem("activeTab", "dashboard");
+      setScreen("dashboard");
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [checkoutStatus]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -207,10 +274,18 @@ export default function App() {
   }, [auth.session, authAction, authenticatedStateReady]);
 
   function openEditor(booking) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return;
+    }
     setEditingSheet(booking);
   }
 
   async function saveBooking(booking) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const saved = await data.saveBooking(booking);
     if (!saved || saved.conflict) return saved;
     setSelectedMonth(booking.checkIn.slice(0, 7));
@@ -221,18 +296,30 @@ export default function App() {
   }
 
   function requestDelete(booking) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return;
+    }
     setOpenSwipeId(null);
     setEditingSheet(null);
     setDeleteCandidate(booking);
   }
 
   function requestCancellation(booking) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return;
+    }
     setEditingSheet(null);
     setCancellationCandidate(booking);
   }
 
   async function confirmCancellation({ percent, availableAt }) {
     if (!cancellationCandidate) return false;
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const originalRevenue = Number(cancellationCandidate.originalRevenue ?? cancellationCandidate.revenue ?? 0);
     const adjustedRevenue = originalRevenue * (percent / 100);
     const saved = await data.saveBooking({
@@ -256,6 +343,11 @@ export default function App() {
 
   async function confirmDelete() {
     if (!deleteCandidate) return;
+    if (activePropertyLocked) {
+      setDeleteCandidate(null);
+      showToast("Unlock this property to make changes", "warning");
+      return;
+    }
     const id = deleteCandidate.id;
     setDeleteCandidate(null);
     setOpenSwipeId(null);
@@ -282,6 +374,10 @@ export default function App() {
   }
 
   function navigate(next) {
+    if (next === "add" && activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return;
+    }
     setEditingSheet(null);
     setOpenSwipeId(null);
     if (tabScreens.has(screen) && tabScreens.has(next) && screen !== next) {
@@ -301,6 +397,10 @@ export default function App() {
   }
 
   function updateBookingPaymentOverride(id, paymentOverride) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return;
+    }
     const booking = data.bookings.find((item) => item.id === id);
     if (!booking) return;
     data.saveBooking({ ...booking, paymentOverride });
@@ -312,29 +412,50 @@ export default function App() {
   }
 
   async function updateFixedCost(month, field, amount) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const updated = await data.updateFixedCost(month, field, amount);
     if (updated) showToast(`${field === "rent" ? data.costLabels.rent : data.costLabels.cleaning} updated`, "success");
   }
 
   async function addExpense(month, expense) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const added = await data.addExpense(month, expense);
     if (added) showToast("Expense added", "success");
     return added;
   }
 
   async function updateExpense(month, expense) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const updated = await data.updateExpense(month, expense);
     if (updated) showToast("Expense updated", "success");
     return updated;
   }
 
   async function deleteExpense(month, id) {
+    if (activePropertyLocked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const deleted = await data.deleteExpense(month, id);
     if (deleted) showToast("Expense deleted", "success");
     return deleted;
   }
 
   async function renameProperty(id, name) {
+    const property = data.properties.find((item) => item.id === id);
+    if (property?.is_locked) {
+      showToast("Unlock this property to make changes", "warning");
+      return false;
+    }
     const renamed = await data.renameProperty(id, name);
     if (renamed) showToast("Property renamed", "success");
     return renamed;
@@ -342,6 +463,44 @@ export default function App() {
 
   function switchProperty(id) {
     data.setActivePropertyId(id);
+  }
+
+  function openAddProperty() {
+    if (data.properties.length >= currentPlanLimit) {
+      setPropertiesOpen(false);
+      setPropertyLimitOpen(true);
+      return;
+    }
+    setPropertiesOpen(false);
+    setAddingProperty(true);
+  }
+
+  async function choosePlan(plan) {
+    try {
+      await startCheckout(plan, auth.user.id);
+    } catch (error) {
+      showToast("Something went wrong", "error");
+      throw error;
+    }
+  }
+
+  async function manageSubscription() {
+    try {
+      await openBillingPortal(auth.user.id);
+    } catch {
+      showToast("Something went wrong", "error");
+    }
+  }
+
+  async function completePropertySelection(ids) {
+    try {
+      await confirmPropertySelection(ids);
+      await Promise.all([subscription.refetch(), data.refreshProperties()]);
+      return true;
+    } catch {
+      showToast("Something went wrong", "error");
+      return false;
+    }
   }
 
   async function updateCurrency(code) {
@@ -418,18 +577,18 @@ export default function App() {
   function renderTabScreen(tabName) {
     if (tabName === "dashboard") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(dashboardMonth)}>
-        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => showToast("Payments coming soon — contact support to continue", "warning")} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={data.isMonthLoading(dashboardMonth)} isInitialized={data.isMonthInitialized(dashboardMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} />
+        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => setPaywallOpen(true)} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={data.isMonthLoading(dashboardMonth)} isInitialized={data.isMonthInitialized(dashboardMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} locked={activePropertyLocked} />
       </PullToRefresh>
     );
     if (tabName === "bookings") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(selectedMonth)}>
-        <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} bookings={data.bookingsByMonth[selectedMonth] || []} isLoading={data.isMonthLoading(selectedMonth)} isInitialized={data.isMonthInitialized(selectedMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(selectedMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(selectedMonth)} formatCurrency={formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} openSwipeId={openSwipeId} onOpenSwipe={setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} />
+        <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} bookings={data.bookingsByMonth[selectedMonth] || []} isLoading={data.isMonthLoading(selectedMonth)} isInitialized={data.isMonthInitialized(selectedMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(selectedMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(selectedMonth)} formatCurrency={formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} locked={activePropertyLocked} onUpgrade={() => setPaywallOpen(true)} />
       </PullToRefresh>
     );
     if (tabName === "add") return <AddBookingScreen currency={currency} onCheckConflict={data.checkBookingConflict} onSave={saveBooking} />;
     if (tabName === "expenses") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(expensesMonth)}>
-        <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} isLoading={data.isMonthLoading(expensesMonth)} isInitialized={data.isMonthInitialized(expensesMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(expensesMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(expensesMonth)} currency={currency} costLabels={data.costLabels} formatCurrency={formatCurrency} onUpdateCostLabel={updateCostLabel} onUpdateFixedCost={updateFixedCost} onAddExpense={addExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} />
+        <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} isLoading={data.isMonthLoading(expensesMonth)} isInitialized={data.isMonthInitialized(expensesMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(expensesMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(expensesMonth)} currency={currency} costLabels={data.costLabels} formatCurrency={formatCurrency} onUpdateCostLabel={updateCostLabel} onUpdateFixedCost={updateFixedCost} onAddExpense={addExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} locked={activePropertyLocked} onUpgrade={() => setPaywallOpen(true)} onLockedAction={() => showToast("Unlock this property to make changes", "warning")} />
       </PullToRefresh>
     );
     if (tabName === "stats") return (
@@ -443,7 +602,15 @@ export default function App() {
         properties={data.properties}
         formatCurrency={formatCurrency}
         onBack={() => navigate("settings")}
-        onAddProperty={(name) => data.addProperty(name, { activate: false })}
+        onAddProperty={(name) => {
+          if (data.properties.length >= currentPlanLimit) {
+            setPropertyLimitOpen(true);
+            return null;
+          }
+          return data.addProperty(name, { activate: false });
+        }}
+        canAddProperty={data.properties.length < currentPlanLimit}
+        onPropertyLimit={() => setPropertyLimitOpen(true)}
         onCheckConflicts={data.checkImportConflicts}
         onImport={data.importBookings}
         onViewBookings={(propertyId, month) => {
@@ -476,6 +643,8 @@ export default function App() {
         }}
         onSignOut={signOutWithTransition}
         onDeleteAccount={deleteAccountData}
+        onChoosePlan={() => setPaywallOpen(true)}
+        onManageSubscription={manageSubscription}
         onBack={() => navigate("dashboard")}
       />
     );
@@ -510,14 +679,31 @@ export default function App() {
 
   const content = authAction ? (
     authScreen
+  ) : checkoutStatus && auth.session ? (
+    <CheckoutStatusScreen
+      status={checkoutStatus}
+      planId={subscription.subscription?.plan}
+    />
   ) : !isAppReady ? (
     <AppLoadingScreen />
   ) : !auth.session || recoveryMode ? (
     authScreen
+  ) : subscription.subscription?.needs_property_selection ? (
+    <PropertySelectionScreen
+      properties={data.properties}
+      planId={subscription.subscription.plan}
+      onConfirm={completePropertySelection}
+    />
+  ) : paywallOpen ? (
+    <PaywallScreen
+      subscription={subscription.subscription}
+      onChoosePlan={choosePlan}
+      onBack={() => setPaywallOpen(false)}
+    />
   ) : !subscription.hasAccess ? (
     <PaywallScreen
       subscription={subscription.subscription}
-      onSubscribe={() => showToast("Payments coming soon — contact support to continue", "warning")}
+      onChoosePlan={choosePlan}
       onSignOut={signOutWithTransition}
     />
   ) : (
@@ -551,10 +737,7 @@ export default function App() {
                   switchProperty(id);
                   setPropertiesOpen(false);
                 }}
-                onAdd={() => {
-                  setPropertiesOpen(false);
-                  setAddingProperty(true);
-                }}
+                onAdd={openAddProperty}
                 onAction={setPropertyAction}
                 onClose={() => setPropertiesOpen(false)}
               />
@@ -574,6 +757,10 @@ export default function App() {
                     return false;
                   }
                   const property = propertyAction;
+                  if (property.is_locked) {
+                    showToast("Unlock this property to make changes", "warning");
+                    return false;
+                  }
                   const result = await data.deleteProperty(property.id, {
                     switchToRemaining: false,
                     deferLocalRemoval: true
@@ -591,6 +778,11 @@ export default function App() {
               <AddPropertySheet
                 onClose={() => setAddingProperty(false)}
                 onSave={async (name) => {
+                  if (data.properties.length >= currentPlanLimit) {
+                    setAddingProperty(false);
+                    setPropertyLimitOpen(true);
+                    return;
+                  }
                   const property = await data.addProperty(name);
                   if (property) {
                     const currentMonth = currentMonthKey();
@@ -600,6 +792,16 @@ export default function App() {
                     showToast("Property added", "success");
                     setAddingProperty(false);
                   }
+                }}
+              />
+            )}
+            {propertyLimitOpen && (
+              <PropertyLimitSheet
+                planId={currentPlan}
+                onClose={() => setPropertyLimitOpen(false)}
+                onUpgrade={() => {
+                  setPropertyLimitOpen(false);
+                  setPaywallOpen(true);
                 }}
               />
             )}
@@ -666,6 +868,7 @@ export default function App() {
       <AnimatePresence>
         {accountTransition && <AccountTransitionOverlay transition={accountTransition} />}
       </AnimatePresence>
+      <PwaUpdateBanner />
     </>
   );
 }
