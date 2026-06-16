@@ -64,6 +64,7 @@ export function PullToRefresh({ onRefresh, children }) {
       <motion.div
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-3 z-40 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-border bg-panel shadow-lg"
+        initial={{ opacity: 0, scale: 0 }}
         animate={{
           opacity: refreshing || distance > 0 ? 1 : 0,
           scale: refreshing ? 1 : progress

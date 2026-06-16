@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, TrendingUp } from "lucide-react";
+import { ChevronDown, Layers3, TrendingUp } from "lucide-react";
 import { MonthNavigator } from "../components/MonthNavigator";
 import { Skeleton } from "../components/Skeleton";
 import { BestWorstCards, blankStats, monthRange, MonthlySummaryTable, StatsChartCard } from "../components/StatsOverview";
@@ -19,7 +19,7 @@ function monthsBetween(start, end) {
   return (endYear - startYear) * 12 + endMonth - startMonth;
 }
 
-export function StatsScreen({ stats, activePropertyId = "", activePropertyName = "My Property", onOpenProperties, onRetry, formatCurrency, isDarkTheme = true, isLoading = false, isInitialized = false, isOnline = true, isSyncing = false }) {
+export function StatsScreen({ stats, activePropertyId = "", activePropertyName = "My Property", onOpenProperties, onOpenAllProperties, onRetry, formatCurrency, isDarkTheme = true, isLoading = false, isInitialized = false, isOnline = true, isSyncing = false }) {
   const sortedStats = useMemo(() => [...stats].sort((a, b) => a.month.localeCompare(b.month)), [stats]);
   const currentWindowStart = useMemo(() => halfYearStart(currentMonthKey()), []);
   const pageCount = useMemo(() => {
@@ -80,7 +80,7 @@ export function StatsScreen({ stats, activePropertyId = "", activePropertyName =
           <ChevronDown size={13} />
         </button>
         <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
-        <h1 className="text-2xl font-extrabold">Performance</h1>
+        <StatsTitle onOpenAllProperties={onOpenAllProperties} />
         <Skeleton className="mt-6 h-[292px]" />
         <div className="mt-3 grid grid-cols-2 gap-3"><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
         <Skeleton className="mt-7 h-5 w-36 rounded-full" />
@@ -97,7 +97,7 @@ export function StatsScreen({ stats, activePropertyId = "", activePropertyName =
           <ChevronDown size={13} />
         </button>
         <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
-        <h1 className="text-2xl font-extrabold">Performance</h1>
+        <StatsTitle onOpenAllProperties={onOpenAllProperties} />
         {!isOnline ? <OfflineUnavailable onRetry={onRetry} /> : (
         <Card className="mt-6 p-8 text-center text-muted"><TrendingUp className="mx-auto text-accent" size={24} /><p className="mt-3 text-sm font-bold">No stats yet</p></Card>
         )}
@@ -112,7 +112,7 @@ export function StatsScreen({ stats, activePropertyId = "", activePropertyName =
         <ChevronDown size={13} />
       </button>
       <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
-      <h1 className="text-2xl font-extrabold">Performance</h1>
+      <StatsTitle onOpenAllProperties={onOpenAllProperties} />
       <MonthNavigator
         className="my-6 rounded-2xl bg-panel p-2"
         label={monthRange(visibleStats)}
@@ -127,5 +127,16 @@ export function StatsScreen({ stats, activePropertyId = "", activePropertyName =
       <BestWorstCards stats={sortedStats} formatCurrency={formatCurrency} />
       <MonthlySummaryTable stats={visibleStats} formatCurrency={formatCurrency} />
     </main>
+  );
+}
+
+function StatsTitle({ onOpenAllProperties }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h1 className="text-2xl font-extrabold">Performance</h1>
+      <button aria-label="Open All Properties" onClick={onOpenAllProperties} className="grid h-10 w-10 place-items-center rounded-2xl bg-panel text-muted">
+        <Layers3 size={18} />
+      </button>
+    </div>
   );
 }

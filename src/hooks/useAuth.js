@@ -13,6 +13,20 @@ const PASSWORD_RECOVERY_EVENT = "hostrack:password-recovery";
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
 const RESET_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}/reset-password`;
 
+function readCachedSession() {
+  try {
+    const authKey = Object.keys(localStorage).find((key) => key.startsWith("sb-") && key.endsWith("-auth-token"));
+    if (!authKey) return null;
+    const stored = JSON.parse(localStorage.getItem(authKey) || "null");
+    const session = stored?.currentSession || stored;
+    if (!session?.user || !session?.access_token) return null;
+    if (session.expires_at && session.expires_at * 1000 <= Date.now()) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 function logError(error) {
   if (import.meta.env.DEV) console.error(error?.message || error);
 }
@@ -110,9 +124,10 @@ export async function initNewUser(userId, propertyName = "My Property") {
 }
 
 export function useAuth() {
-  const [session, setSession] = useState(null);
-  const [user, setUser] = useState(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const cachedSession = readCachedSession();
+  const [session, setSession] = useState(cachedSession);
+  const [user, setUser] = useState(cachedSession?.user ?? null);
+  const [isAuthLoading, setIsAuthLoading] = useState(!cachedSession);
   const [authError, setAuthError] = useState(null);
   const revealSessionTimer = useRef(null);
   const hasInitialized = useRef(false);
@@ -277,6 +292,7 @@ export function useAuth() {
     localStorage.removeItem(PASSWORD_RECOVERY_KEY);
     localStorage.removeItem("hostrack-data-cache");
     localStorage.removeItem("hostrack-base-cache");
+    localStorage.removeItem("hostrack-subscription-cache");
     localStorage.removeItem("hostrack-pending-sync");
     localStorage.removeItem("hostrack-sync-id-map");
     sessionStorage.removeItem("activeTab");

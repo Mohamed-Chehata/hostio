@@ -44,8 +44,9 @@ export default function App() {
   const auth = useAuth();
   const subscription = useSubscription(auth.user);
   const { toast, showToast, dismissToast } = useToast();
-  const [showSplash, setShowSplash] = useState(() => sessionStorage.getItem("splashShown") !== "true");
-  const [revealContent, setRevealContent] = useState(() => sessionStorage.getItem("splashShown") === "true");
+  const hasSeenSplash = sessionStorage.getItem("splashShown") === "true" || localStorage.getItem("hostrack-app-launched") === "true";
+  const [showSplash, setShowSplash] = useState(() => !hasSeenSplash);
+  const [revealContent, setRevealContent] = useState(() => hasSeenSplash);
   const [recoveryMode, setRecoveryMode] = useState(() => window.location.pathname === "/reset-password" || window.location.hash.includes("type=recovery"));
   const [accountTransition, setAccountTransition] = useState(null);
   const [authAction, setAuthAction] = useState(null);
@@ -67,7 +68,8 @@ export default function App() {
   const [dashboardMonth, setDashboardMonth] = useState(currentMonthKey);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
   const [expensesMonth, setExpensesMonth] = useState(currentMonthKey);
-  const data = useAppData(subscription.isResolved && subscription.hasAccess ? auth.user : null, [dashboardMonth, selectedMonth, expensesMonth]);
+  const dataUser = auth.user && (subscription.hasAccess || !subscription.isResolved) ? auth.user : null;
+  const data = useAppData(dataUser, [dashboardMonth, selectedMonth, expensesMonth]);
   const [isDarkTheme, setIsDarkTheme] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const currency = useMemo(() => app.resolveCurrency(data.userSettings), [app, data.userSettings]);
   const formatCurrency = useCallback((amount) => app.formatCurrency(amount, currency.symbol), [app, currency.symbol]);
@@ -92,6 +94,7 @@ export default function App() {
   const screenHistory = useRef([]);
   const exitBackPressedAt = useRef(0);
   const backGuardReady = useRef(false);
+  const allowNextBrowserBack = useRef(false);
   const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || { month: dashboardMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
   const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || { month: expensesMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
   const dashboardBookings = data.bookingsByMonth[dashboardMonth] || [];
@@ -102,10 +105,12 @@ export default function App() {
     && (!subscription.hasAccess || data.baseInitialized);
   const rawAppReady = !auth.isAuthLoading
     && (!auth.session || recoveryMode || authenticatedStateReady);
-  const isAppReady = rawAppReady && loadingFloorComplete;
+  const hasCachedAppShell = Boolean(auth.session && data.baseInitialized);
+  const shouldUseFullLoading = !hasCachedAppShell && !authAction;
+  const isAppReady = hasCachedAppShell || (rawAppReady && loadingFloorComplete);
 
   useEffect(() => {
-    if (loadingFloorComplete) return undefined;
+    if (loadingFloorComplete || hasCachedAppShell) return undefined;
     let timer;
 
     if (!revealContent) {
@@ -121,7 +126,7 @@ export default function App() {
     const remaining = Math.max(0, 1000 - (Date.now() - loadingStartedAt.current));
     timer = setTimeout(() => setLoadingFloorComplete(true), remaining);
     return () => clearTimeout(timer);
-  }, [loadingFloorComplete, rawAppReady, revealContent]);
+  }, [hasCachedAppShell, loadingFloorComplete, rawAppReady, revealContent]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -248,13 +253,12 @@ export default function App() {
   useEffect(() => {
     if (!revealContent) return undefined;
     if (!backGuardReady.current) {
-      window.history.replaceState({ hostrack: true }, "", window.location.href);
-      window.history.pushState({ hostrackBackGuard: true }, "", window.location.href);
+      window.history.pushState({ page: screen || "dashboard" }, "", window.location.href);
       backGuardReady.current = true;
     }
 
     function restoreBackGuard() {
-      window.history.pushState({ hostrackBackGuard: true }, "", window.location.href);
+      window.history.pushState({ page: screen || "dashboard" }, "", window.location.href);
     }
 
     function blurFocusedInput() {
@@ -323,12 +327,17 @@ export default function App() {
     }
 
     function handleBackPress() {
-      if (closeTopSheet()) {
-        restoreBackGuard();
+      if (allowNextBrowserBack.current) {
+        allowNextBrowserBack.current = false;
         return;
       }
 
       if (blurFocusedInput()) {
+        restoreBackGuard();
+        return;
+      }
+
+      if (closeTopSheet()) {
         restoreBackGuard();
         return;
       }
@@ -356,7 +365,11 @@ export default function App() {
       const now = Date.now();
       if (now - exitBackPressedAt.current < 2000) {
         exitBackPressedAt.current = 0;
-        setTimeout(() => window.history.back(), 0);
+        if (navigator.app?.exitApp) navigator.app.exitApp();
+        else {
+          allowNextBrowserBack.current = true;
+          setTimeout(() => window.history.back(), 0);
+        }
         return;
       }
       exitBackPressedAt.current = now;
@@ -522,6 +535,7 @@ export default function App() {
     }
     if (!options.fromBack && screen !== next && tabScreens.has(screen) && tabScreens.has(next)) {
       screenHistory.current = [...screenHistory.current.filter((item) => item !== next), screen].slice(-12);
+      window.history.pushState({ page: next }, "", window.location.href);
     }
     setEditingSheet(null);
     setOpenSwipeId(null);
@@ -738,7 +752,7 @@ export default function App() {
     );
     if (tabName === "stats") return (
       <PullToRefresh onRefresh={data.refreshStatsMonths}>
-        <StatsScreen stats={data.statsMonths} isLoading={data.statsLoading} isInitialized={data.statsInitialized} activePropertyId={data.activePropertyId} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} onRetry={data.fetchStatsMonths} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} />
+        <StatsScreen stats={data.statsMonths} isLoading={data.statsLoading} isInitialized={data.statsInitialized} activePropertyId={data.activePropertyId} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} onOpenAllProperties={() => navigate("all-properties")} onRetry={data.fetchStatsMonths} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} />
       </PullToRefresh>
     );
     if (tabName === "all-properties") return <AllPropertiesScreen properties={data.properties} monthsData={data.allPropertiesMonths} isMonthLoading={data.isAllPropertiesMonthLoading} isMonthInitialized={data.isAllPropertiesMonthInitialized} fetchMonth={data.fetchAllPropertiesMonth} refreshMonth={data.refreshAllPropertiesMonth} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} onBack={() => navigate("dashboard")} />;
@@ -829,11 +843,11 @@ export default function App() {
       status={checkoutStatus}
       planId={subscription.subscription?.plan}
     />
-  ) : !isAppReady ? (
+  ) : !isAppReady && shouldUseFullLoading ? (
     <AppLoadingScreen />
   ) : !auth.session || recoveryMode ? (
     authScreen
-  ) : subscription.subscription?.needs_property_selection ? (
+  ) : subscription.isResolved && subscription.subscription?.needs_property_selection ? (
     <PropertySelectionScreen
       properties={data.properties}
       planId={subscription.subscription.plan}
@@ -845,7 +859,7 @@ export default function App() {
       onChoosePlan={choosePlan}
       onBack={() => setPaywallOpen(false)}
     />
-  ) : !subscription.hasAccess ? (
+  ) : subscription.isResolved && !subscription.hasAccess ? (
     <PaywallScreen
       subscription={subscription.subscription}
       onChoosePlan={choosePlan}
@@ -1006,6 +1020,7 @@ export default function App() {
           onReveal={() => setRevealContent(true)}
           onComplete={() => {
             sessionStorage.setItem("splashShown", "true");
+            localStorage.setItem("hostrack-app-launched", "true");
             setShowSplash(false);
           }}
         />

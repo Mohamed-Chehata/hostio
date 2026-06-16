@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
+const SUBSCRIPTION_CACHE_KEY = "hostrack-subscription-cache";
+
+function readCachedSubscription() {
+  try {
+    const value = localStorage.getItem(SUBSCRIPTION_CACHE_KEY);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
 function calculateAccess(subscription) {
   if (!subscription) return false;
   const now = Date.now();
@@ -18,8 +29,9 @@ function calculateAccess(subscription) {
 }
 
 export function useSubscription(user) {
-  const [subscription, setSubscription] = useState(null);
-  const [resolvedUserId, setResolvedUserId] = useState(null);
+  const cached = readCachedSubscription();
+  const [subscription, setSubscription] = useState(cached?.subscription || null);
+  const [resolvedUserId, setResolvedUserId] = useState(cached?.userId || null);
   const [error, setError] = useState(null);
 
   const fetchSubscription = useCallback(async () => {
@@ -42,6 +54,7 @@ export function useSubscription(user) {
       setSubscription(null);
     } else {
       setSubscription(data);
+      localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify({ userId: user.id, subscription: data }));
     }
     setResolvedUserId(user.id);
     return data;

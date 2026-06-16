@@ -261,10 +261,14 @@ function toBookingConflict(row) {
 
 export function useAppData(user, months = []) {
   const userId = user?.id;
-  const [properties, setProperties] = useState([]);
-  const [baseInitialized, setBaseInitialized] = useState(false);
+  const cachedBaseForUser = (() => {
+    const cached = readStoredJson(BASE_CACHE_KEY, null);
+    return cached?.userId === userId ? cached : null;
+  })();
+  const [properties, setProperties] = useState(cachedBaseForUser?.properties || []);
+  const [baseInitialized, setBaseInitialized] = useState(Boolean(cachedBaseForUser));
   const [activePropertyId, setActivePropertyIdState] = useState(() => localStorage.getItem("activePropertyId") || "");
-  const [userSettings, setUserSettings] = useState(defaultSettings);
+  const [userSettings, setUserSettings] = useState(cachedBaseForUser?.userSettings || defaultSettings);
   const [bookingsByMonth, setBookingsByMonth] = useState({});
   const [costsByMonth, setCostsByMonth] = useState({});
   const [expensesByMonth, setExpensesByMonth] = useState({});
@@ -593,16 +597,19 @@ export function useAppData(user, months = []) {
 
   const fetchPropertiesAndSettings = useCallback(async () => {
     if (!userId) return null;
-    setBaseInitialized(false);
+    const cachedBase = readStoredJson(BASE_CACHE_KEY, null);
+    if (cachedBase?.userId === userId) {
+      setProperties(cachedBase.properties || []);
+      setUserSettings(cachedBase.userSettings || defaultSettings);
+      const saved = localStorage.getItem("activePropertyId");
+      const nextActive = cachedBase.properties?.some((property) => property.id === saved) ? saved : cachedBase.properties?.[0]?.id || "";
+      if (nextActive) setActivePropertyId(nextActive);
+      setBaseInitialized(true);
+    } else {
+      setBaseInitialized(false);
+    }
     if (!isNetworkAvailable()) {
-      const cachedBase = readStoredJson(BASE_CACHE_KEY, null);
       if (cachedBase?.userId === userId) {
-        setProperties(cachedBase.properties || []);
-        setUserSettings(cachedBase.userSettings || defaultSettings);
-        const saved = localStorage.getItem("activePropertyId");
-        const nextActive = cachedBase.properties?.some((property) => property.id === saved) ? saved : cachedBase.properties?.[0]?.id || "";
-        if (nextActive) setActivePropertyId(nextActive);
-        setBaseInitialized(true);
         return cachedBase.properties || [];
       }
       setBaseInitialized(true);
