@@ -9,7 +9,7 @@ import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 
 export function BookingsScreen({ month, setMonth, activePropertyName = "My Property", onOpenProperties, bookings, locked = false, onUpgrade, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, onRetry, formatCurrency, onSelect, onRequestDelete, onPaymentOverride, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages }) {
   const visible = bookings.filter((booking) => monthKey(booking.checkIn) === month).sort((a, b) => a.checkIn.localeCompare(b.checkIn));
-  const showSkeleton = !isInitialized || isLoading;
+  const showSkeleton = !isInitialized;
 
   return (
     <main className="px-5 pb-24 pt-6">

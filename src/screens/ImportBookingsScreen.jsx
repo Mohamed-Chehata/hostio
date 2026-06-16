@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -204,6 +204,16 @@ export function ImportBookingsScreen({
     if (stepId === "import" && importing) return;
     moveTo(steps[Math.max(0, stepIndex - 1)], "back");
   }
+
+  useEffect(() => {
+    function handleAppBack(event) {
+      event.preventDefault();
+      goBack();
+    }
+
+    window.addEventListener("hostrack:app-back", handleAppBack);
+    return () => window.removeEventListener("hostrack:app-back", handleAppBack);
+  }, [goBack]);
 
   function viewBookings() {
     const first = result?.succeeded?.[0] || conflictResult.ready[0];

@@ -70,7 +70,7 @@ export function AllPropertiesScreen({
       netRevenue: combinedStats.reduce((total, item) => total + item.netRevenue, 0)
     };
   }, [combinedStats, effectiveIds.size, visibleMonths]);
-  const showSkeleton = visibleMonths.some((month) => !isMonthInitialized(month) || isMonthLoading(month));
+  const showSkeleton = visibleMonths.some((month) => !isMonthInitialized(month));
 
   function toggleProperty(id) {
     setSelectedIds((current) => {
@@ -92,6 +92,7 @@ export function AllPropertiesScreen({
         <h1 className="text-2xl font-extrabold">All Properties</h1>
       </header>
       <ConnectionStatus isOnline={isOnline} isSyncing={isSyncing} />
+      <p className="mt-2 text-sm font-semibold text-muted">Showing stats for all properties</p>
 
       <MonthNavigator
         className="my-6 rounded-2xl bg-panel p-2"

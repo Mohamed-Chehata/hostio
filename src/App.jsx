@@ -323,23 +323,32 @@ export default function App() {
     }
 
     function handleBackPress() {
-      if (blurFocusedInput()) {
-        restoreBackGuard();
-        return;
-      }
-
       if (closeTopSheet()) {
         restoreBackGuard();
         return;
       }
 
-      if (screen !== "dashboard" && goBackInsideApp()) {
+      if (blurFocusedInput()) {
+        restoreBackGuard();
+        return;
+      }
+
+      if (screen === "import-bookings") {
+        const handled = !window.dispatchEvent(new CustomEvent("hostrack:app-back", { cancelable: true }));
+        if (handled) {
+          restoreBackGuard();
+          return;
+        }
+      }
+
+      if (["bookings", "expenses", "stats"].includes(screen)) {
+        navigate("dashboard", { fromBack: true });
         restoreBackGuard();
         return;
       }
 
       if (screen !== "dashboard") {
-        navigate("dashboard", { fromBack: true });
+        if (!goBackInsideApp()) navigate("dashboard", { fromBack: true });
         restoreBackGuard();
         return;
       }

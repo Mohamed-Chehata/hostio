@@ -1,4 +1,4 @@
-import { ArrowUpRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Clock3, Layers3, Settings2, Sparkles, WalletCards, X } from "lucide-react";
+import { ArrowUpRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Clock3, Settings2, Sparkles, WalletCards, X } from "lucide-react";
 import { BookingCard } from "../components/BookingCard";
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { MonthNavigator } from "../components/MonthNavigator";
@@ -10,7 +10,7 @@ import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 import { monthLabel } from "../utils/monthUtils";
 
 export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyName = "My Property", onMonthChange, onOpenExpenses, onSeeAllBookings, onEditBooking, onRequestDelete, onPaymentOverride, onRetry, onUpgrade, locked = false, onDismissTrialBanner, trialDaysRemaining, showTrialBanner = false, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages, revenueAnimation, revenueDirection, stats, bookings, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency }) {
-  const showSkeleton = !isInitialized || isLoading;
+  const showSkeleton = !isInitialized;
   const recent = [...bookings].sort((a, b) => b.checkIn.localeCompare(a.checkIn)).slice(0, 3);
   const quickStats = [
     { label: costLabels.rent, amount: stats.rent, icon: Building2 },
@@ -39,9 +39,6 @@ export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyNa
           />
         </div>
         <div className="flex items-center gap-2">
-          <button aria-label="Open All Properties" onClick={() => onNavigate("all-properties")} className="grid h-10 w-10 place-items-center rounded-2xl bg-panel text-muted">
-            <Layers3 size={18} />
-          </button>
           <button aria-label="Open settings" onClick={() => onNavigate("settings")} className="grid h-10 w-10 place-items-center rounded-2xl bg-panel text-muted">
             <Settings2 size={18} />
           </button>

@@ -41,7 +41,7 @@ export function ExpensesScreen({ stats, month, setMonth, activePropertyName = "M
   const previousTotal = useRef(stats.rent + stats.cleaning + stats.expenses);
   const totalCosts = stats.rent + stats.cleaning + stats.expenses;
   const totalDirection = totalCosts > previousTotal.current ? "up" : totalCosts < previousTotal.current ? "down" : null;
-  const showSkeleton = !isInitialized || isLoading;
+  const showSkeleton = !isInitialized;
 
   useEffect(() => {
     previousTotal.current = totalCosts;

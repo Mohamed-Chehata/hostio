@@ -72,7 +72,7 @@ export function StatsScreen({ stats, activePropertyId = "", activePropertyName =
     sessionStorage.setItem("statsPageIndex", String(boundedIndex));
   }
 
-  if (!isInitialized || isLoading) {
+  if (!isInitialized) {
     return (
       <main className="px-5 pb-24 pt-6">
         <button onClick={onOpenProperties} className="-ml-2 mb-1 flex min-h-11 items-center gap-1 rounded-2xl px-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-accent">
