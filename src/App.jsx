@@ -39,12 +39,24 @@ const tabOrder = { dashboard: 0, bookings: 1, add: 2, expenses: 3, stats: 4, set
 const tabScreens = new Set(Object.keys(tabOrder));
 const transientScreens = new Set(["import-bookings"]);
 
+function hasSeenSplashBefore() {
+  const launched = localStorage.getItem("hostrack-app-launched") === "true";
+  const sessionSeen = sessionStorage.getItem("splashShown") === "true";
+  if (launched || sessionSeen) {
+    localStorage.setItem("hostrack-app-launched", "true");
+    sessionStorage.setItem("splashShown", "true");
+    return true;
+  }
+  localStorage.setItem("hostrack-app-launched", "true");
+  return false;
+}
+
 export default function App() {
   const app = useApp();
   const auth = useAuth();
   const subscription = useSubscription(auth.user);
   const { toast, showToast, dismissToast } = useToast();
-  const hasSeenSplash = sessionStorage.getItem("splashShown") === "true" || localStorage.getItem("hostrack-app-launched") === "true";
+  const [hasSeenSplash] = useState(() => hasSeenSplashBefore());
   const [showSplash, setShowSplash] = useState(() => !hasSeenSplash);
   const [revealContent, setRevealContent] = useState(() => hasSeenSplash);
   const [recoveryMode, setRecoveryMode] = useState(() => window.location.pathname === "/reset-password" || window.location.hash.includes("type=recovery"));
