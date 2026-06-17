@@ -11,7 +11,9 @@ const PASSWORD_RECOVERY_KEY = "hostrackPasswordRecovery";
 const VERIFIED_EVENT = "hostrack:email-verified";
 const PASSWORD_RECOVERY_EVENT = "hostrack:password-recovery";
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-const RESET_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}/reset-password`;
+const APP_BASE_PATH = "/app";
+const APP_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}${APP_BASE_PATH}`;
+const RESET_REDIRECT_URL = `${APP_REDIRECT_URL}/reset-password`;
 
 function readCachedSession() {
   try {
@@ -165,7 +167,7 @@ export function useAuth() {
         logError(error);
         setAuthError(getAuthError(error));
       }
-      if (window.location.pathname === "/reset-password" && data.session?.user) {
+      if (window.location.pathname === `${APP_BASE_PATH}/reset-password` && data.session?.user) {
         localStorage.setItem(PASSWORD_RECOVERY_KEY, "true");
         notifyPasswordRecovery();
         setSession(null);
@@ -203,7 +205,7 @@ export function useAuth() {
       }
 
       if (event === "SIGNED_IN" && nextSession?.user) {
-        if (window.location.pathname === "/reset-password" || localStorage.getItem(PASSWORD_RECOVERY_KEY) === "true") {
+        if (window.location.pathname === `${APP_BASE_PATH}/reset-password` || localStorage.getItem(PASSWORD_RECOVERY_KEY) === "true") {
           localStorage.setItem(PASSWORD_RECOVERY_KEY, "true");
           notifyPasswordRecovery();
           setSession(null);
@@ -266,7 +268,7 @@ export function useAuth() {
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: APP_REDIRECT_URL,
         data: { property_name: pendingPropertyName }
       }
     });

@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     const stripe = getStripe();
     const session = await stripe.billingPortal.sessions.create({
       customer: subscription.stripe_customer_id,
-      return_url: `${appUrl()}/settings`
+      return_url: `${appUrl()}/app/settings`
     });
 
     return sendJson(res, 200, { url: session.url });

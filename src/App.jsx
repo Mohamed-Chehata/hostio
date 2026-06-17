@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, X } from "lucide-react";
+import { AlertTriangle, Check, Phone, X } from "lucide-react";
 import logo from "./assets/logo.png";
 import { BottomNav } from "./components/BottomNav";
 import { BookingEditSheet } from "./components/BookingEditSheet";
@@ -32,12 +32,21 @@ import { ImportBookingsScreen } from "./screens/ImportBookingsScreen";
 import { PaywallScreen } from "./screens/PaywallScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
+import { LandingPage } from "./screens/LandingPage";
 import { getDataError, getToastTypeForError } from "./utils/errorHandler";
 import { currentMonthKey, moveMonth } from "./utils/monthUtils";
+import { getDeviceType } from "./utils/device";
 
+const APP_BASE_PATH = "/app";
+const PUBLIC_URL = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, "");
+const LANDING_URL = PUBLIC_URL.replace(/\/app$/, "");
 const tabOrder = { dashboard: 0, bookings: 1, add: 2, expenses: 3, stats: 4, settings: 5, "import-bookings": 6, "all-properties": 7 };
 const tabScreens = new Set(Object.keys(tabOrder));
 const transientScreens = new Set(["import-bookings"]);
+
+function appPath(path = "") {
+  return `${APP_BASE_PATH}${path}`;
+}
 
 function hasSeenSplashBefore() {
   const launched = localStorage.getItem("hostrack-app-launched") === "true";
@@ -52,6 +61,49 @@ function hasSeenSplashBefore() {
 }
 
 export default function App() {
+  const [routePath, setRoutePath] = useState(() => window.location.pathname);
+  const [deviceType, setDeviceType] = useState(() => getDeviceType());
+
+  useEffect(() => {
+    function handleRouteChange() {
+      setRoutePath(window.location.pathname);
+    }
+    window.addEventListener("popstate", handleRouteChange);
+    window.addEventListener("hostrack:route-changed", handleRouteChange);
+    return () => {
+      window.removeEventListener("popstate", handleRouteChange);
+      window.removeEventListener("hostrack:route-changed", handleRouteChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleResize() {
+      setDeviceType(getDeviceType());
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (routePath !== "/reset-password") return;
+    window.history.replaceState({}, "", `${appPath("/reset-password")}${window.location.hash}`);
+    window.dispatchEvent(new Event("hostrack:route-changed"));
+  }, [routePath]);
+
+  if (routePath === "/reset-password") return null;
+  if (!routePath.startsWith(APP_BASE_PATH)) {
+    return <LandingPage onGetStarted={() => {
+      window.history.pushState({}, "", APP_BASE_PATH);
+      window.dispatchEvent(new Event("hostrack:route-changed"));
+    }} />;
+  }
+
+  if (deviceType === "desktop") return <MobileOnlyScreen />;
+
+  return <HostrackApplication />;
+}
+
+function HostrackApplication() {
   const app = useApp();
   const auth = useAuth();
   const subscription = useSubscription(auth.user);
@@ -59,7 +111,7 @@ export default function App() {
   const [hasSeenSplash] = useState(() => hasSeenSplashBefore());
   const [showSplash, setShowSplash] = useState(() => !hasSeenSplash);
   const [revealContent, setRevealContent] = useState(() => hasSeenSplash);
-  const [recoveryMode, setRecoveryMode] = useState(() => window.location.pathname === "/reset-password" || window.location.hash.includes("type=recovery"));
+  const [recoveryMode, setRecoveryMode] = useState(() => window.location.pathname === appPath("/reset-password") || window.location.hash.includes("type=recovery"));
   const [accountTransition, setAccountTransition] = useState(null);
   const [authAction, setAuthAction] = useState(null);
   const [paywallOpen, setPaywallOpen] = useState(() => new URLSearchParams(window.location.search).get("checkout") === "cancel");
@@ -70,7 +122,7 @@ export default function App() {
   });
   const [syncReviewOpen, setSyncReviewOpen] = useState(false);
   const [screen, setScreen] = useState(() => {
-    if (window.location.pathname === "/settings") return "settings";
+    if (window.location.pathname === appPath("/settings")) return "settings";
     const saved = sessionStorage.getItem("activeTab");
     return tabScreens.has(saved) ? saved : "dashboard";
   });
@@ -220,7 +272,7 @@ export default function App() {
       const refreshToken = params.get("refresh_token");
 
       if (!accessToken || !refreshToken) {
-        window.history.replaceState({}, "", "/");
+        window.history.replaceState({}, "", APP_BASE_PATH);
         setRecoveryMode(false);
         return;
       }
@@ -233,12 +285,12 @@ export default function App() {
 
       if (cancelled) return;
       if (error) {
-        window.history.replaceState({}, "", "/");
+        window.history.replaceState({}, "", APP_BASE_PATH);
         setRecoveryMode(false);
         return;
       }
 
-      window.history.replaceState({}, "", "/reset-password");
+      window.history.replaceState({}, "", appPath("/reset-password"));
       window.dispatchEvent(new CustomEvent("hostrack:password-recovery"));
     }
 
@@ -1052,6 +1104,26 @@ function AppLoadingScreen() {
         <span className="mx-auto block h-6 w-6 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
         <p className="mt-3 text-xs font-bold text-muted">Loading...</p>
       </div>
+    </main>
+  );
+}
+
+function MobileOnlyScreen() {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(LANDING_URL)}`;
+
+  return (
+    <main className="mx-auto grid min-h-screen max-w-[390px] place-items-center bg-app px-6 text-center text-white">
+      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: "easeOut" }} className="w-full rounded-2xl bg-panel p-6 shadow-2xl">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-accent/15 text-accent">
+          <Phone size={32} />
+        </div>
+        <h1 className="mt-6 text-3xl font-extrabold tracking-tight">Hostrack is designed for mobile</h1>
+        <p className="mt-3 text-sm font-semibold leading-6 text-muted">Scan the QR code below with your phone to get started</p>
+        <div className="mx-auto mt-7 w-fit rounded-2xl bg-[#FFFFFF] p-3">
+          <img src={qrUrl} alt="QR code to open Hostrack" className="h-[200px] w-[200px]" />
+        </div>
+        <p className="mt-5 text-xs font-bold text-muted">{LANDING_URL.replace(/^https?:\/\//, "")}</p>
+      </motion.div>
     </main>
   );
 }

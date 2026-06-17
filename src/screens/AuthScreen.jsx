@@ -13,7 +13,9 @@ const variants = {
 };
 
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-const RESET_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}/reset-password`;
+const APP_BASE_PATH = "/app";
+const APP_REDIRECT_URL = `${APP_URL.replace(/\/$/, "")}${APP_BASE_PATH}`;
+const RESET_REDIRECT_URL = `${APP_REDIRECT_URL}/reset-password`;
 const SIGNUP_SUCCESS_KEY = "hostrack-signup-success";
 
 function validEmail(value) {
@@ -21,7 +23,7 @@ function validEmail(value) {
 }
 
 export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSignedUp, initialMode, onRecoveryComplete, onBackFromForgot }) {
-  const [mode, setMode] = useState(() => initialMode || (window.location.pathname === "/reset-password" ? "reset-password" : "sign-in"));
+  const [mode, setMode] = useState(() => initialMode || (window.location.pathname === `${APP_BASE_PATH}/reset-password` ? "reset-password" : "sign-in"));
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [email, setEmail] = useState("");
@@ -60,7 +62,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
       if (mode === "reset-success") {
         supabase.auth.signOut().finally(() => {
           localStorage.removeItem("hostrackPasswordRecovery");
-          window.history.replaceState({}, "", "/");
+          window.history.replaceState({}, "", APP_BASE_PATH);
           setSuccess(false);
           setMode("sign-in");
           setPassword("");
@@ -121,7 +123,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
       setMode("reset-password");
       setSuccess(false);
       setLocalError("");
-      window.history.replaceState({}, "", "/reset-password");
+      window.history.replaceState({}, "", `${APP_BASE_PATH}/reset-password`);
     }
 
     window.addEventListener("hostrack:password-recovery", handlePasswordRecovery);
@@ -134,7 +136,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
     const timer = setTimeout(async () => {
       const { data } = await supabase.auth.getSession();
       if (cancelled || data.session) return;
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState({}, "", APP_BASE_PATH);
       setDirection(-1);
       setMode("sign-in");
       setLocalError("");
@@ -222,7 +224,7 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: verificationEmail,
-        options: { emailRedirectTo: window.location.origin }
+        options: { emailRedirectTo: APP_REDIRECT_URL }
       });
       if (error) throw error;
       setResendSeconds(60);

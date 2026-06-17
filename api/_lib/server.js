@@ -69,7 +69,7 @@ export async function requireUser(req) {
 }
 
 export function appUrl() {
-  return (process.env.VITE_APP_URL || "https://hostio-tau.vercel.app").replace(/\/$/, "");
+  return (process.env.VITE_APP_URL || "https://hostrack.app").replace(/\/$/, "");
 }
 
 export function sendJson(res, status, body) {
