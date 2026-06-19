@@ -1,4 +1,5 @@
-import { ArrowUpRight, Building2, CalendarDays, ChevronDown, CircleDollarSign, Clock3, Settings2, Sparkles, WalletCards, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowUpRight, Building2, CalendarDays, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Download, Settings2, Sparkles, WalletCards, X } from "lucide-react";
 import { BookingCard } from "../components/BookingCard";
 import { AnimatedNumber } from "../components/AnimatedNumber";
 import { MonthNavigator } from "../components/MonthNavigator";
@@ -8,15 +9,45 @@ import { ConnectionStatus } from "../components/ConnectionStatus";
 import { OfflineUnavailable } from "../components/OfflineUnavailable";
 import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 import { monthLabel } from "../utils/monthUtils";
+import { InstallSteps } from "./LandingPage";
+import { getDeviceType } from "../utils/device";
+
+const INSTALL_PROMPT_KEY = "hostrack-install-prompt-shown";
+const INSTALL_PROMPT_VISITS_KEY = "hostrack-install-prompt-dashboard-visits";
 
 export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyName = "My Property", onMonthChange, onOpenExpenses, onSeeAllBookings, onEditBooking, onRequestDelete, onPaymentOverride, onRetry, onUpgrade, locked = false, onDismissTrialBanner, trialDaysRemaining, showTrialBanner = false, openSwipeId, onOpenSwipe, onCloseSwipe, deletionStages, revenueAnimation, revenueDirection, stats, bookings, isLoading = false, isInitialized = false, offlineUnavailable = false, isOnline = true, isSyncing = false, costLabels = { rent: "Rent", cleaning: "Cleaning" }, formatCurrency }) {
   const showSkeleton = !isInitialized;
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [installPromptClosing, setInstallPromptClosing] = useState(false);
+  const [installPromptExpanded, setInstallPromptExpanded] = useState(false);
   const recent = [...bookings].sort((a, b) => b.checkIn.localeCompare(a.checkIn)).slice(0, 3);
   const quickStats = [
     { label: costLabels.rent, amount: stats.rent, icon: Building2 },
     { label: costLabels.cleaning, amount: stats.cleaning, icon: Sparkles },
     { label: "Expenses", amount: stats.expenses, icon: WalletCards }
   ];
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    if (isStandalone || localStorage.getItem(INSTALL_PROMPT_KEY) === "true") return;
+
+    const visits = Number(sessionStorage.getItem(INSTALL_PROMPT_VISITS_KEY) || "0") + 1;
+    sessionStorage.setItem(INSTALL_PROMPT_VISITS_KEY, String(visits));
+
+    if (visits >= 4) {
+      localStorage.setItem(INSTALL_PROMPT_KEY, "true");
+      setShowInstallPrompt(false);
+      return;
+    }
+
+    setShowInstallPrompt(true);
+  }, []);
+
+  function dismissInstallPrompt() {
+    localStorage.setItem(INSTALL_PROMPT_KEY, "true");
+    setInstallPromptClosing(true);
+    window.setTimeout(() => setShowInstallPrompt(false), 250);
+  }
 
   return (
     <main className="px-5 pb-28 pt-6">
@@ -56,6 +87,15 @@ export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyNa
             <X size={16} />
           </button>
         </div>
+      )}
+      {showInstallPrompt && (
+        <InstallReminderBanner
+          expanded={installPromptExpanded}
+          closing={installPromptClosing}
+          initialPlatform={getDeviceType() === "iphone" ? "iphone" : "android"}
+          onToggle={() => setInstallPromptExpanded((current) => !current)}
+          onDismiss={dismissInstallPrompt}
+        />
       )}
 
       {offlineUnavailable && <OfflineUnavailable onRetry={onRetry} />}
@@ -132,6 +172,66 @@ export function DashboardScreen({ onNavigate, onOpenProperties, activePropertyNa
       </section>
       </div>
     </main>
+  );
+}
+
+function InstallReminderBanner({ expanded, closing, initialPlatform, onToggle, onDismiss }) {
+  const [platform, setPlatform] = useState(initialPlatform);
+  const [showGuide, setShowGuide] = useState(expanded);
+
+  useEffect(() => {
+    if (expanded) {
+      setShowGuide(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setShowGuide(false), 220);
+    return () => window.clearTimeout(timer);
+  }, [expanded]);
+
+  return (
+    <div
+      className={`relative mb-4 overflow-hidden rounded-2xl bg-panel shadow-lg transition-[max-height,opacity,margin] duration-[250ms] ease-in-out ${
+        closing ? "max-h-0 opacity-0" : expanded ? "max-h-[430px] opacity-100" : "max-h-[96px] opacity-100"
+      }`}
+    >
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-4 text-left">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-accent/15 text-accent">
+          <Download size={18} />
+        </span>
+        <span className="min-w-0 flex-1 text-sm font-extrabold leading-5">Add Hostrack to your home screen for quick access</span>
+        <ChevronRight size={18} className={`shrink-0 text-muted transition-transform duration-200 ${expanded ? "rotate-90" : ""}`} />
+      </button>
+      <button
+        type="button"
+        aria-label="Dismiss install reminder"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDismiss();
+        }}
+        className="absolute right-6 mt-[-60px] grid h-11 w-11 place-items-center rounded-2xl text-muted"
+      >
+        <X size={16} />
+      </button>
+      {showGuide && (
+        <div className={`border-t border-border px-4 pb-4 pt-3 transition-all duration-[220ms] ${expanded ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}>
+          <div className="mb-3 grid grid-cols-2 rounded-2xl bg-border/50 p-1 text-center">
+            {["android", "iphone"].map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setPlatform(option)}
+                className={`min-h-11 rounded-2xl px-3 py-2 text-xs font-extrabold transition-colors ${
+                  platform === option ? "bg-accent text-ink" : "text-muted"
+                }`}
+              >
+                {option === "iphone" ? "iPhone" : "Android"}
+              </button>
+            ))}
+          </div>
+          <InstallSteps platform={platform} />
+        </div>
+      )}
+    </div>
   );
 }
 

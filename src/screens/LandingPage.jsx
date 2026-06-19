@@ -68,7 +68,16 @@ export function LandingPage({ onGetStarted }) {
           </motion.section>
         ) : (
           <motion.section custom={1} variants={sectionVariants} initial="hidden" animate="visible" className="mt-8 rounded-2xl bg-panel p-4 shadow-2xl">
-            <div className="grid grid-cols-2 rounded-2xl bg-border/50 p-1">
+            <button
+              type="button"
+              onClick={onGetStarted}
+              className="w-full rounded-2xl bg-accent px-5 py-4 text-sm font-extrabold text-ink shadow-glow transition active:scale-[0.98]"
+            >
+              Get Started
+            </button>
+            <p className="mt-4 text-center text-xs font-bold text-muted">New to Hostrack? Here's how to install it:</p>
+
+            <div className="mt-5 grid grid-cols-2 rounded-2xl bg-border/50 p-1">
               {["android", "iphone"].map((option) => (
                 <button
                   key={option}
@@ -88,14 +97,6 @@ export function LandingPage({ onGetStarted }) {
                 <InstallSteps platform={platform} />
               </motion.div>
             </AnimatePresence>
-
-            <button
-              type="button"
-              onClick={onGetStarted}
-              className="mt-7 w-full rounded-2xl bg-accent px-5 py-4 text-sm font-extrabold text-ink shadow-glow transition active:scale-[0.98]"
-            >
-              Get Started
-            </button>
           </motion.section>
         )}
 
@@ -120,20 +121,16 @@ export function LandingPage({ onGetStarted }) {
   );
 }
 
-function InstallSteps({ platform }) {
+export function InstallSteps({ platform }) {
   const steps = platform === "iphone"
     ? [
-        { text: "Tap the button below to open Hostrack in Safari", icon: Smartphone },
-        { text: "Tap the Share icon at the bottom of the screen", icon: Share },
-        { text: 'Scroll down and tap "Add to Home Screen"', icon: Check },
-        { text: 'Tap "Add" in the top right', icon: Check },
+        { text: "Open this page in Safari", icon: Smartphone, safariNote: true },
+        { text: 'Tap the Share icon, then "Add to Home Screen"', icon: Share },
         { text: "Open Hostrack from your home screen", icon: Smartphone }
       ]
     : [
-        { text: "Tap the button below to open Hostrack", icon: Smartphone },
         { text: "Tap the three dots menu in the top right of your browser", icon: MoreVertical },
         { text: 'Tap "Install app" or "Add to Home Screen"', icon: Check },
-        { text: 'Tap "Install" to confirm', icon: Check },
         { text: "Open Hostrack from your home screen", icon: Smartphone }
       ];
 
@@ -142,12 +139,19 @@ function InstallSteps({ platform }) {
       {steps.map((step, index) => {
         const Icon = step.icon;
         return (
-          <li key={step.text} className="flex items-start gap-3 rounded-2xl bg-app/70 p-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-xs font-extrabold text-ink">{index + 1}</span>
-            <span className="flex min-h-7 flex-1 items-center gap-2 text-left text-sm font-bold leading-5">
-              <Icon size={16} className="shrink-0 text-accent" />
-              {step.text}
-            </span>
+          <li key={step.text} className="rounded-2xl bg-app/70 p-3">
+            <div className="flex items-start gap-3">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-xs font-extrabold text-ink">{index + 1}</span>
+              <span className="flex min-h-7 flex-1 items-center gap-2 text-left text-sm font-bold leading-5">
+                <Icon size={16} className="shrink-0 text-accent" />
+                {step.text}
+              </span>
+            </div>
+            {step.safariNote && (
+              <p className="ml-10 mt-2 rounded-2xl bg-[#78350F] px-3 py-2 text-left text-[11px] font-bold leading-4 text-[#FEF3C7]">
+                Must be opened in Safari. Chrome and other browsers can't install apps on iPhone.
+              </p>
+            )}
           </li>
         );
       })}

@@ -15,6 +15,7 @@ import { Toast } from "./components/Toast";
 import { SyncFailuresSheet } from "./components/SyncFailuresSheet";
 import { useApp } from "./context/AppContext";
 import { useAppData } from "./hooks/useAppData";
+import { createVideoDemoData } from "./data/videoDemoData";
 import { useAuth } from "./hooks/useAuth";
 import { useSubscription } from "./hooks/useSubscription";
 import { useToast } from "./hooks/useToast";
@@ -43,6 +44,7 @@ const LANDING_URL = PUBLIC_URL.replace(/\/app$/, "");
 const tabOrder = { dashboard: 0, bookings: 1, add: 2, expenses: 3, stats: 4, settings: 5, "import-bookings": 6, "all-properties": 7 };
 const tabScreens = new Set(Object.keys(tabOrder));
 const transientScreens = new Set(["import-bookings"]);
+const VIDEO_DEMO_MODE = true;
 
 function appPath(path = "") {
   return `${APP_BASE_PATH}${path}`;
@@ -134,6 +136,7 @@ function HostrackApplication() {
   const [expensesMonth, setExpensesMonth] = useState(currentMonthKey);
   const dataUser = auth.user && (subscription.hasAccess || !subscription.isResolved) ? auth.user : null;
   const data = useAppData(dataUser, [dashboardMonth, selectedMonth, expensesMonth]);
+  const videoDemo = useMemo(() => createVideoDemoData(currentMonthKey()), []);
   const [isDarkTheme, setIsDarkTheme] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const currency = useMemo(() => app.resolveCurrency(data.userSettings), [app, data.userSettings]);
   const formatCurrency = useCallback((amount) => app.formatCurrency(amount, currency.symbol), [app, currency.symbol]);
@@ -159,9 +162,15 @@ function HostrackApplication() {
   const exitBackPressedAt = useRef(0);
   const backGuardReady = useRef(false);
   const allowNextBrowserBack = useRef(false);
-  const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || { month: dashboardMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
-  const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || { month: expensesMonth, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 };
-  const dashboardBookings = data.bookingsByMonth[dashboardMonth] || [];
+  const blankMonthStats = (month) => ({ month, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 });
+  const currentStats = VIDEO_DEMO_MODE
+    ? (videoDemo.statsByMonth[dashboardMonth] || blankMonthStats(dashboardMonth))
+    : (data.monthlyStats.find((item) => item.month === dashboardMonth) || blankMonthStats(dashboardMonth));
+  const expensesStats = VIDEO_DEMO_MODE
+    ? (videoDemo.statsByMonth[expensesMonth] || blankMonthStats(expensesMonth))
+    : (data.monthlyStats.find((item) => item.month === expensesMonth) || blankMonthStats(expensesMonth));
+  const dashboardBookings = VIDEO_DEMO_MODE ? (videoDemo.bookingsByMonth[dashboardMonth] || []) : (data.bookingsByMonth[dashboardMonth] || []);
+  const displayPropertyName = VIDEO_DEMO_MODE ? videoDemo.propertyName : (data.activeProperty?.name || "My Property");
   const activePropertyLocked = Boolean(data.activeProperty?.is_locked);
   const currentPlan = subscription.subscription?.plan;
   const currentPlanLimit = PLANS[currentPlan]?.propertyLimit ?? Infinity;
@@ -800,23 +809,23 @@ function HostrackApplication() {
   function renderTabScreen(tabName) {
     if (tabName === "dashboard") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(dashboardMonth)}>
-        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => setPaywallOpen(true)} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={data.isMonthLoading(dashboardMonth)} isInitialized={data.isMonthInitialized(dashboardMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} locked={activePropertyLocked} />
+        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={displayPropertyName} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => setPaywallOpen(true)} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={VIDEO_DEMO_MODE ? false : data.isMonthLoading(dashboardMonth)} isInitialized={VIDEO_DEMO_MODE ? true : data.isMonthInitialized(dashboardMonth)} offlineUnavailable={VIDEO_DEMO_MODE ? false : data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} locked={activePropertyLocked} />
       </PullToRefresh>
     );
     if (tabName === "bookings") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(selectedMonth)}>
-        <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} bookings={data.bookingsByMonth[selectedMonth] || []} isLoading={data.isMonthLoading(selectedMonth)} isInitialized={data.isMonthInitialized(selectedMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(selectedMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(selectedMonth)} formatCurrency={formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} locked={activePropertyLocked} onUpgrade={() => setPaywallOpen(true)} />
+        <BookingsScreen month={selectedMonth} setMonth={setSelectedMonth} activePropertyName={displayPropertyName} onOpenProperties={() => setPropertiesOpen(true)} bookings={VIDEO_DEMO_MODE ? (videoDemo.bookingsByMonth[selectedMonth] || []) : (data.bookingsByMonth[selectedMonth] || [])} isLoading={VIDEO_DEMO_MODE ? false : data.isMonthLoading(selectedMonth)} isInitialized={VIDEO_DEMO_MODE ? true : data.isMonthInitialized(selectedMonth)} offlineUnavailable={VIDEO_DEMO_MODE ? false : data.isMonthOfflineUnavailable(selectedMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(selectedMonth)} formatCurrency={formatCurrency} onSelect={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} locked={activePropertyLocked} onUpgrade={() => setPaywallOpen(true)} />
       </PullToRefresh>
     );
     if (tabName === "add") return <AddBookingScreen currency={currency} onCheckConflict={data.checkBookingConflict} onSave={saveBooking} />;
     if (tabName === "expenses") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(expensesMonth)}>
-        <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} isLoading={data.isMonthLoading(expensesMonth)} isInitialized={data.isMonthInitialized(expensesMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(expensesMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(expensesMonth)} currency={currency} costLabels={data.costLabels} formatCurrency={formatCurrency} onUpdateCostLabel={updateCostLabel} onUpdateFixedCost={updateFixedCost} onAddExpense={addExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} locked={activePropertyLocked} onUpgrade={() => setPaywallOpen(true)} onLockedAction={() => showToast("Unlock this property to make changes", "warning")} />
+        <ExpensesScreen stats={expensesStats} month={expensesMonth} setMonth={setExpensesMonth} activePropertyName={displayPropertyName} onOpenProperties={() => setPropertiesOpen(true)} isLoading={VIDEO_DEMO_MODE ? false : data.isMonthLoading(expensesMonth)} isInitialized={VIDEO_DEMO_MODE ? true : data.isMonthInitialized(expensesMonth)} offlineUnavailable={VIDEO_DEMO_MODE ? false : data.isMonthOfflineUnavailable(expensesMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} onRetry={() => data.retryMonth(expensesMonth)} currency={currency} costLabels={data.costLabels} formatCurrency={formatCurrency} onUpdateCostLabel={updateCostLabel} onUpdateFixedCost={updateFixedCost} onAddExpense={addExpense} onUpdateExpense={updateExpense} onDeleteExpense={deleteExpense} locked={activePropertyLocked} onUpgrade={() => setPaywallOpen(true)} onLockedAction={() => showToast("Unlock this property to make changes", "warning")} />
       </PullToRefresh>
     );
     if (tabName === "stats") return (
       <PullToRefresh onRefresh={data.refreshStatsMonths}>
-        <StatsScreen stats={data.statsMonths} isLoading={data.statsLoading} isInitialized={data.statsInitialized} activePropertyId={data.activePropertyId} activePropertyName={data.activeProperty?.name || "My Property"} onOpenProperties={() => setPropertiesOpen(true)} onOpenAllProperties={() => navigate("all-properties")} onRetry={data.fetchStatsMonths} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} />
+        <StatsScreen stats={VIDEO_DEMO_MODE ? videoDemo.statsMonths : data.statsMonths} isLoading={VIDEO_DEMO_MODE ? false : data.statsLoading} isInitialized={VIDEO_DEMO_MODE ? true : data.statsInitialized} activePropertyId={VIDEO_DEMO_MODE ? "video-demo-property" : data.activePropertyId} activePropertyName={displayPropertyName} onOpenProperties={() => setPropertiesOpen(true)} onOpenAllProperties={() => navigate("all-properties")} onRetry={data.fetchStatsMonths} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} />
       </PullToRefresh>
     );
     if (tabName === "all-properties") return <AllPropertiesScreen properties={data.properties} monthsData={data.allPropertiesMonths} isMonthLoading={data.isAllPropertiesMonthLoading} isMonthInitialized={data.isAllPropertiesMonthInitialized} fetchMonth={data.fetchAllPropertiesMonth} refreshMonth={data.refreshAllPropertiesMonth} formatCurrency={formatCurrency} isDarkTheme={isDarkTheme} isOnline={data.isOnline} isSyncing={data.isSyncing} onBack={() => navigate("dashboard")} />;
