@@ -2,9 +2,9 @@ import { useState } from "react";
 import { ArrowLeft, Check, ChevronRight, Coins, CreditCard, FileUp, KeyRound, LogOut, Mail, Trash2 } from "lucide-react";
 import { BottomSheet } from "../components/BottomSheet";
 import { Button, Card, Input } from "../components/ui";
-import { PLANS } from "../config/pricing";
+import { formatPlanPrice, PLANS } from "../config/pricing";
 
-export function SettingsScreen({ currency, currencies, theme, subscription, trialDaysRemaining, updateTheme, updateCurrency, onCurrencyUpdated, email, onImportData, onChoosePlan, onManageSubscription, onChangePassword, onSignOut, onDeleteAccount, onBack }) {
+export function SettingsScreen({ currency, currencies, theme, subscription, trialDaysRemaining, plans = PLANS, updateTheme, updateCurrency, onCurrencyUpdated, email, onImportData, onChoosePlan, onManageSubscription, onChangePassword, onSignOut, onDeleteAccount, onBack }) {
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
@@ -35,14 +35,18 @@ export function SettingsScreen({ currency, currencies, theme, subscription, tria
         <SettingsRow
           icon={CreditCard}
           label="Plan"
-          value={subscriptionLabel(subscription, trialDaysRemaining)}
+          value={subscriptionLabel(subscription, trialDaysRemaining, plans)}
           valueDanger={subscription?.status === "expired" || subscription?.status === "canceled"}
           multiline
         />
-        {subscription?.status === "trialing" ? (
-          <button onClick={onChoosePlan} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Choose a plan</button>
-        ) : subscription?.status === "active" ? (
+        {subscription?.status === "trialing" && subscription?.billing_provider === "whop" ? (
           <button onClick={onManageSubscription} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Manage subscription</button>
+        ) : subscription?.status === "trialing" ? (
+          <button onClick={onChoosePlan} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Choose a plan</button>
+        ) : subscription?.status === "active" && subscription?.billing_provider === "whop" ? (
+          <button onClick={onManageSubscription} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Manage subscription</button>
+        ) : subscription?.status === "active" ? (
+          <button onClick={onChoosePlan} className="min-h-14 w-full px-4 text-left text-sm font-extrabold text-accent">Move billing to Whop</button>
         ) : null}
       </SettingsSection>
 
@@ -90,20 +94,23 @@ export function SettingsScreen({ currency, currencies, theme, subscription, tria
   );
 }
 
-function subscriptionLabel(subscription, trialDaysRemaining) {
+function subscriptionLabel(subscription, trialDaysRemaining, plans) {
   if (subscription?.status === "trialing") {
+    if (subscription.billing_provider === "whop" && plans[subscription.plan]) {
+      return `${plans[subscription.plan].name} trial — ${trialDaysRemaining} ${trialDaysRemaining === 1 ? "day" : "days"} remaining`;
+    }
     return `Free trial — ${trialDaysRemaining} ${trialDaysRemaining === 1 ? "day" : "days"} remaining`;
   }
   if (subscription?.status === "active") {
-    const plan = PLANS[subscription.plan];
-    const planLabel = plan ? `${plan.name} — $${plan.price}/month` : "Active subscription";
+    const plan = plans[subscription.plan];
+    const planLabel = plan ? `${plan.name} — ${formatPlanPrice(plan)}/month` : "Active subscription";
     if (!subscription.current_period_end) return planLabel;
     const renewalDate = new Date(subscription.current_period_end).toLocaleDateString([], {
       month: "short",
       day: "numeric",
       year: "numeric"
     });
-    return `${planLabel} · renews ${renewalDate}`;
+    return `${planLabel} · ${subscription.cancel_at_period_end ? "ends" : "renews"} ${renewalDate}`;
   }
   return "Inactive";
 }

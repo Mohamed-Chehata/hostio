@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Check, Eye, EyeOff, Link2 } from "lucide-react";
 import logo from "../assets/logo.png";
 import { supabase } from "../lib/supabase";
 import { Input } from "../components/ui";
@@ -22,7 +22,7 @@ function validEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSignedUp, initialMode, onRecoveryComplete, onBackFromForgot }) {
+export function AuthScreen({ onSignIn, onSignUp, onConnectWhop, onLoadingChange, error, onSignedUp, initialMode, onRecoveryComplete, onBackFromForgot }) {
   const [mode, setMode] = useState(() => initialMode || (window.location.pathname === `${APP_BASE_PATH}/reset-password` ? "reset-password" : "sign-in"));
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -487,6 +487,10 @@ export function AuthScreen({ onSignIn, onSignUp, onLoadingChange, error, onSigne
 
               <button type="button" onClick={() => switchMode("sign-up")} className="mx-auto mt-5 block min-h-11 rounded-2xl px-4 text-sm font-bold text-accent">
                 New here? Create an account
+              </button>
+              <div className="my-2 flex items-center gap-3 text-xs font-bold text-muted"><span className="h-px flex-1 bg-border" /><span>or</span><span className="h-px flex-1 bg-border" /></div>
+              <button type="button" onClick={onConnectWhop} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-panel text-sm font-extrabold transition active:scale-[0.98]">
+                <Link2 size={17} className="text-accent" /> Continue with Whop
               </button>
             </div>
           </motion.section>

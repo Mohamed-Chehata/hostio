@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Check, LoaderCircle, LogOut } from "lucide-react";
-import { PLANS, PRICING } from "../config/pricing";
+import { formatPlanPrice, PLANS, PRICING } from "../config/pricing";
 
 const planOrder = ["starter", "growth", "pro"];
 
-export function PaywallScreen({ subscription, onChoosePlan, onBack, onSignOut }) {
+export function PaywallScreen({ subscription, plans = PLANS, onChoosePlan, onConnectWhop, onBack, onSignOut }) {
   const [loadingPlan, setLoadingPlan] = useState(null);
 
   async function choosePlan(plan) {
@@ -33,7 +33,7 @@ export function PaywallScreen({ subscription, onChoosePlan, onBack, onSignOut })
 
       <div className="mt-7 space-y-4">
         {planOrder.map((id, index) => {
-          const plan = PLANS[id];
+          const plan = plans[id];
           const popular = id === "growth";
           return (
             <motion.section
@@ -69,7 +69,7 @@ export function PaywallScreen({ subscription, onChoosePlan, onBack, onSignOut })
 
               <h2 className="text-lg font-extrabold">{plan.name}</h2>
               <div className="mt-3 flex items-end gap-1">
-                <span className="text-[28px] font-extrabold leading-none">${plan.price}</span>
+                <span className="text-[28px] font-extrabold leading-none">{formatPlanPrice(plan)}</span>
                 <span className="pb-0.5 text-sm font-semibold text-muted">/month</span>
               </div>
 
@@ -97,6 +97,10 @@ export function PaywallScreen({ subscription, onChoosePlan, onBack, onSignOut })
           );
         })}
       </div>
+
+      <button onClick={onConnectWhop} disabled={Boolean(loadingPlan)} className="mx-auto mt-6 block min-h-11 rounded-2xl px-4 text-sm font-extrabold text-accent disabled:opacity-50">
+        Already purchased on Whop? Connect account
+      </button>
 
       {!onBack && (
         <button onClick={onSignOut} className="mx-auto mt-7 flex min-h-11 items-center gap-2 px-4 text-sm font-bold text-muted">

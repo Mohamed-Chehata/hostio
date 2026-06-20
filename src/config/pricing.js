@@ -7,3 +7,11 @@ export const PLANS = {
 export const PRICING = {
   trialDays: 7
 };
+
+export function formatPlanPrice(plan) {
+  return new Intl.NumberFormat("en", {
+    style: "currency",
+    currency: plan.currency || "USD",
+    maximumFractionDigits: Number.isInteger(plan.price) ? 0 : 2
+  }).format(plan.price);
+}

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, MoreVertical, Share, Smartphone } from "lucide-react";
 import logo from "../assets/logo.png";
-import { PLANS, PRICING } from "../config/pricing";
+import { formatPlanPrice, PRICING } from "../config/pricing";
+import { usePlanCatalog } from "../hooks/usePlanCatalog";
 import { getDeviceType } from "../utils/device";
 
 const PUBLIC_URL = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, "").replace(/\/app$/, "");
@@ -23,6 +24,7 @@ const tabVariants = {
 };
 
 export function LandingPage({ onGetStarted }) {
+  const plans = usePlanCatalog("public");
   const [deviceType, setDeviceType] = useState(() => getDeviceType());
   const [platform, setPlatform] = useState(() => getDeviceType() === "iphone" ? "iphone" : "android");
   const [direction, setDirection] = useState(1);
@@ -102,11 +104,11 @@ export function LandingPage({ onGetStarted }) {
 
         <motion.section custom={2} variants={sectionVariants} initial="hidden" animate="visible" className="mt-6 rounded-2xl border border-border bg-panel/70 p-5 text-center">
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <span className="text-sm font-extrabold">Plans starting at ${PLANS.starter.price}/month</span>
+            <span className="text-sm font-extrabold">Plans starting at {formatPlanPrice(plans.starter)}/month</span>
             <span className="rounded-full bg-accent px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-ink">{PRICING.trialDays}-day free trial</span>
           </div>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {Object.values(PLANS).map((plan) => (
+            {Object.values(plans).map((plan) => (
               <span key={plan.name} className="rounded-full bg-border/60 px-3 py-2 text-xs font-extrabold text-muted">{plan.name}</span>
             ))}
           </div>

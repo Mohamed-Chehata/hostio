@@ -45,7 +45,7 @@ export function useSubscription(user) {
     setError(null);
     const { data, error: subscriptionError } = await supabase
       .from("subscriptions")
-      .select("id,user_id,status,trial_ends_at,current_period_end,plan,needs_property_selection,stripe_customer_id")
+      .select("id,user_id,status,trial_ends_at,current_period_end,plan,needs_property_selection,billing_provider,whop_user_id,whop_membership_id,whop_plan_id,whop_manage_url,cancel_at_period_end")
       .eq("user_id", user.id)
       .maybeSingle();
     if (subscriptionError) {

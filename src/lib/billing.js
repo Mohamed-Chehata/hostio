@@ -18,32 +18,46 @@ function billingUrl(path) {
   return path;
 }
 
-async function billingRequest(path, body = {}) {
+async function billingRequest(path, body = {}, { auth = true } = {}) {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error("Unauthorized");
+  if (auth && !token) throw new Error("Unauthorized");
 
   const response = await fetch(billingUrl(path), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
-    body: JSON.stringify({ ...body, accessToken: token })
+    body: JSON.stringify({ ...body, ...(token ? { accessToken: token } : {}) })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "Something went wrong");
   return result;
 }
 
-export async function startCheckout(plan, userId) {
-  const { url } = await billingRequest("/api/create-checkout-session", { plan, userId });
+export async function startCheckout(plan) {
+  const { url, checkoutConfigurationId } = await billingRequest("/api/create-whop-checkout", { plan });
+  localStorage.setItem("hostrack-pending-whop-checkout", checkoutConfigurationId);
   window.location.href = url;
 }
 
-export async function openBillingPortal(userId) {
-  const { url } = await billingRequest("/api/create-portal-session", { userId });
+export async function openBillingPortal() {
+  const { url } = await billingRequest("/api/open-whop-membership");
   window.location.href = url;
+}
+
+export async function connectWhopAccount() {
+  const { url } = await billingRequest("/api/whop-oauth-start", {}, { auth: false });
+  window.location.href = url;
+}
+
+export async function reconcileWhopCheckout() {
+  const checkoutConfigurationId = localStorage.getItem("hostrack-pending-whop-checkout");
+  if (!checkoutConfigurationId) return null;
+  const result = await billingRequest("/api/reconcile-whop-checkout", { checkoutConfigurationId });
+  if (result.active) localStorage.removeItem("hostrack-pending-whop-checkout");
+  return result;
 }
 
 export function confirmPropertySelection(propertyIds) {

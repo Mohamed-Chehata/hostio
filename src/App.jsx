@@ -17,8 +17,9 @@ import { useApp } from "./context/AppContext";
 import { useAppData } from "./hooks/useAppData";
 import { useAuth } from "./hooks/useAuth";
 import { useSubscription } from "./hooks/useSubscription";
+import { usePlanCatalog } from "./hooks/usePlanCatalog";
 import { useToast } from "./hooks/useToast";
-import { confirmPropertySelection, openBillingPortal, startCheckout } from "./lib/billing";
+import { confirmPropertySelection, connectWhopAccount, openBillingPortal, reconcileWhopCheckout, startCheckout } from "./lib/billing";
 import { supabase } from "./lib/supabase";
 import { PLANS } from "./config/pricing";
 import { AddBookingScreen } from "./screens/AddBookingScreen";
@@ -107,6 +108,7 @@ function HostrackApplication() {
   const app = useApp();
   const auth = useAuth();
   const subscription = useSubscription(auth.user);
+  const planCatalog = usePlanCatalog("hidden");
   const { toast, showToast, dismissToast } = useToast();
   const [hasSeenSplash] = useState(() => hasSeenSplashBefore());
   const [showSplash, setShowSplash] = useState(() => !hasSeenSplash);
@@ -207,6 +209,11 @@ function HostrackApplication() {
     const deadline = Date.now() + 10000;
 
     async function poll() {
+      try {
+        await reconcileWhopCheckout();
+      } catch {
+        // Webhook reconciliation may still complete while the checkout is propagating.
+      }
       const latest = await subscription.refetch();
       if (cancelled) return;
       if (latest?.status === "active") {
@@ -233,6 +240,24 @@ function HostrackApplication() {
       cancelled = true;
     };
   }, [auth.user?.id, checkoutStatus, subscription.refetch]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const whopResult = params.get("whop");
+    if (!whopResult) return;
+    const messages = {
+      connected: ["Whop account connected", "success"],
+      no_membership: ["No active Hostrack membership was found", "warning"],
+      email_unverified: ["Verify your Whop email before continuing", "warning"],
+      oauth_error: ["Something went wrong", "error"]
+    };
+    const [message, type] = messages[whopResult] || messages.oauth_error;
+    showToast(message, type);
+    if (whopResult === "connected") subscription.refetch();
+    params.delete("whop");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }, [showToast, subscription.refetch]);
 
   useEffect(() => {
     if (checkoutStatus !== "complete") return undefined;
@@ -701,7 +726,7 @@ function HostrackApplication() {
 
   async function choosePlan(plan) {
     try {
-      await startCheckout(plan, auth.user.id);
+      await startCheckout(plan);
     } catch (error) {
       showToast("Something went wrong", "error");
       throw error;
@@ -710,7 +735,15 @@ function HostrackApplication() {
 
   async function manageSubscription() {
     try {
-      await openBillingPortal(auth.user.id);
+      await openBillingPortal();
+    } catch {
+      showToast("Something went wrong", "error");
+    }
+  }
+
+  async function connectWhop() {
+    try {
+      await connectWhopAccount();
     } catch {
       showToast("Something went wrong", "error");
     }
@@ -801,7 +834,7 @@ function HostrackApplication() {
   function renderTabScreen(tabName) {
     if (tabName === "dashboard") return (
       <PullToRefresh onRefresh={() => data.refreshMonth(dashboardMonth)}>
-        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => setPaywallOpen(true)} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={data.isMonthLoading(dashboardMonth)} isInitialized={data.isMonthInitialized(dashboardMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} locked={activePropertyLocked} />
+        <DashboardScreen onNavigate={navigate} onOpenProperties={() => setPropertiesOpen(true)} activePropertyName={data.activeProperty?.name || "My Property"} onMonthChange={changeDashboardMonth} onOpenExpenses={openExpensesForDashboardMonth} onSeeAllBookings={seeAllDashboardBookings} onEditBooking={openEditor} onRequestDelete={requestDelete} onPaymentOverride={updateBookingPaymentOverride} onRetry={() => data.retryMonth(dashboardMonth)} onUpgrade={() => setPaywallOpen(true)} onDismissTrialBanner={() => setTrialBannerDismissed(true)} trialDaysRemaining={subscription.trialDaysRemaining} showTrialBanner={!trialBannerDismissed && subscription.subscription?.billing_provider === "hostrack_trial" && subscription.subscription?.status === "trialing" && subscription.trialDaysRemaining > 0 && subscription.trialDaysRemaining <= 2} openSwipeId={openSwipeId} onOpenSwipe={activePropertyLocked ? () => showToast("Unlock this property to make changes", "warning") : setOpenSwipeId} onCloseSwipe={() => setOpenSwipeId(null)} deletionStages={deletionStages} revenueAnimation={null} revenueDirection={null} stats={currentStats} bookings={dashboardBookings} isLoading={data.isMonthLoading(dashboardMonth)} isInitialized={data.isMonthInitialized(dashboardMonth)} offlineUnavailable={data.isMonthOfflineUnavailable(dashboardMonth)} isOnline={data.isOnline} isSyncing={data.isSyncing} costLabels={data.costLabels} formatCurrency={formatCurrency} locked={activePropertyLocked} />
       </PullToRefresh>
     );
     if (tabName === "bookings") return (
@@ -849,6 +882,7 @@ function HostrackApplication() {
         currency={currency}
         currencies={app.currencies}
         subscription={subscription.subscription}
+        plans={planCatalog}
         trialDaysRemaining={subscription.trialDaysRemaining}
         theme={data.userSettings.theme || "system"}
         updateTheme={async (theme) => {
@@ -891,6 +925,7 @@ function HostrackApplication() {
       onRecoveryComplete={() => setRecoveryMode(false)}
       onSignIn={auth.signIn}
       onSignUp={auth.signUp}
+      onConnectWhop={connectWhop}
       onLoadingChange={setAuthAction}
       onSignedUp={() => {
         sessionStorage.setItem("activeTab", "dashboard");
@@ -921,13 +956,17 @@ function HostrackApplication() {
   ) : paywallOpen ? (
     <PaywallScreen
       subscription={subscription.subscription}
+      plans={planCatalog}
       onChoosePlan={choosePlan}
+      onConnectWhop={connectWhop}
       onBack={() => setPaywallOpen(false)}
     />
   ) : subscription.isResolved && !subscription.hasAccess ? (
     <PaywallScreen
       subscription={subscription.subscription}
+      plans={planCatalog}
       onChoosePlan={choosePlan}
+      onConnectWhop={connectWhop}
       onSignOut={signOutWithTransition}
     />
   ) : (
