@@ -56,11 +56,6 @@ export default async function handler(req, res) {
     if (!membership) return redirect(res, `${appUrl()}/app?whop=no_membership`);
 
     const supabase = getSupabaseAdmin();
-    if (stored.userId) {
-      await ensureHostrackUserRows(stored.userId, { whopMembership: membership });
-      return redirect(res, `${appUrl()}/app?whop=connected`);
-    }
-
     const { data: linkedEntitlement, error: linkedEntitlementError } = await supabase
       .from("whop_entitlements")
       .select("hostrack_user_id")
@@ -69,8 +64,9 @@ export default async function handler(req, res) {
     if (linkedEntitlementError) throw linkedEntitlementError;
 
     let loginEmail = whopUser.email;
-    if (linkedEntitlement?.hostrack_user_id) {
-      const { data: linkedUser, error: linkedUserError } = await supabase.auth.admin.getUserById(linkedEntitlement.hostrack_user_id);
+    const hostrackUserId = stored.userId || linkedEntitlement?.hostrack_user_id;
+    if (hostrackUserId) {
+      const { data: linkedUser, error: linkedUserError } = await supabase.auth.admin.getUserById(hostrackUserId);
       if (linkedUserError || !linkedUser?.user?.email) throw linkedUserError || new Error("Linked Hostrack user is unavailable");
       loginEmail = linkedUser.user.email;
     }

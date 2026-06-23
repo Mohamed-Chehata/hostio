@@ -763,7 +763,7 @@ function HostrackApplication() {
 
   async function connectWhop() {
     try {
-      await connectWhopAccount();
+      await connectWhopAccount({ linkCurrentUser: Boolean(auth.session) });
     } catch {
       showToast("Something went wrong", "error");
     }

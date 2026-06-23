@@ -19,7 +19,7 @@ function billingUrl(path) {
 }
 
 async function billingRequest(path, body = {}, { auth = true } = {}) {
-  const { data } = await supabase.auth.getSession();
+  const { data } = auth ? await supabase.auth.getSession() : { data: { session: null } };
   const token = data.session?.access_token;
   if (auth && !token) throw new Error("Unauthorized");
 
@@ -47,8 +47,8 @@ export async function openBillingPortal() {
   window.location.href = url;
 }
 
-export async function connectWhopAccount() {
-  const { url } = await billingRequest("/api/whop-oauth-start", {}, { auth: false });
+export async function connectWhopAccount({ linkCurrentUser = false } = {}) {
+  const { url } = await billingRequest("/api/whop-oauth-start", {}, { auth: linkCurrentUser });
   window.location.href = url;
 }
 
