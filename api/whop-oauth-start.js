@@ -40,12 +40,11 @@ export default async function handler(req, res) {
       response_type: "code",
       client_id: requiredEnv("WHOP_OAUTH_CLIENT_ID"),
       redirect_uri: redirectUri,
-      scope: "openid profile email",
+      scope: "openid email",
       state,
       nonce,
       code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-      company_id: requiredEnv("WHOP_COMPANY_ID")
+      code_challenge_method: "S256"
     });
     return sendJson(res, 200, { url: `https://api.whop.com/oauth/authorize?${params}` });
   } catch (error) {
