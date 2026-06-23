@@ -1,17 +1,4 @@
 {
-  "redirects": [
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "query",
-          "key": "code"
-        }
-      ],
-      "destination": "/api/whop-app-session",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",

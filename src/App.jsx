@@ -93,7 +93,8 @@ export default function App() {
   if (routePath === "/reset-password") return null;
   if (!routePath.startsWith(APP_BASE_PATH)) {
     if (new URLSearchParams(window.location.search).has("code")) {
-      window.location.replace(`/api/whop-app-session${window.location.search}`);
+      window.history.replaceState({}, "", `${APP_BASE_PATH}?source=whop&launch=1`);
+      window.dispatchEvent(new Event("hostrack:route-changed"));
       return null;
     }
     window.history.replaceState({}, "", APP_BASE_PATH);
@@ -163,6 +164,7 @@ function HostrackApplication() {
   const exitBackPressedAt = useRef(0);
   const backGuardReady = useRef(false);
   const allowNextBrowserBack = useRef(false);
+  const whopLaunchStarted = useRef(false);
   const blankMonthStats = (month) => ({ month, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 });
   const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || blankMonthStats(dashboardMonth);
   const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || blankMonthStats(expensesMonth);
@@ -548,6 +550,22 @@ function HostrackApplication() {
     if (!subscription.error) return;
     showToast("Something went wrong", "error");
   }, [showToast, subscription.error]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isWhopLaunch = params.get("source") === "whop" && params.get("launch") === "1";
+    if (!isWhopLaunch || whopLaunchStarted.current || auth.isAuthLoading || auth.session) return;
+
+    whopLaunchStarted.current = true;
+    params.delete("launch");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${APP_BASE_PATH}${query ? `?${query}` : ""}`);
+    setAuthAction("whop");
+    connectWhopAccount({ linkCurrentUser: false }).catch(() => {
+      setAuthAction(null);
+      showToast("Something went wrong", "error");
+    });
+  }, [auth.isAuthLoading, auth.session, showToast]);
 
   useEffect(() => {
     if (authAction !== "login") return;
