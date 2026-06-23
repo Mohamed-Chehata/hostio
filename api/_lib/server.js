@@ -15,6 +15,7 @@ export function getWhop() {
   if (!whopClient) {
     whopClient = new Whop({
       apiKey: process.env.WHOP_API_KEY,
+      appID: process.env.WHOP_OAUTH_CLIENT_ID || process.env.NEXT_PUBLIC_WHOP_APP_ID || null,
       webhookKey: process.env.WHOP_WEBHOOK_SECRET || null
     });
   }

@@ -93,6 +93,10 @@ export default function App() {
 
   if (routePath === "/reset-password") return null;
   if (!routePath.startsWith(APP_BASE_PATH)) {
+    if (new URLSearchParams(window.location.search).has("code")) {
+      window.location.replace(`/api/whop-app-session${window.location.search}`);
+      return null;
+    }
     return <LandingPage onGetStarted={() => {
       window.history.pushState({}, "", APP_BASE_PATH);
       window.dispatchEvent(new Event("hostrack:route-changed"));
