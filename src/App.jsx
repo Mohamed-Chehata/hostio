@@ -257,7 +257,12 @@ function HostrackApplication() {
     const reasonMessages = {
       missing_whop_user_token: "Whop did not send the app login token",
       no_membership_for_whop_user: "No active Hostrack membership was found",
-      missing_whop_membership_email: "Whop did not send an account email"
+      missing_whop_membership_email: "Whop did not send an account email",
+      root_code_exchange_failed_400: "Whop rejected the app login code",
+      root_code_exchange_failed_401: "Whop rejected the app login credentials",
+      root_code_userinfo_failed_401: "Whop login expired. Try opening Hostrack from Whop again",
+      root_code_missing_user: "Whop did not identify the account",
+      whop_email_unverified: "Verify your Whop email before continuing"
     };
     const [message, type] = reason && reasonMessages[reason]
       ? [reasonMessages[reason], "error"]
