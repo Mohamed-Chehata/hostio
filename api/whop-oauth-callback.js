@@ -3,6 +3,7 @@ import {
   ensureHostrackUserRows,
   findWhopMembershipForUser,
   getSupabaseAdmin,
+  getSupabaseAuthClient,
   oauthCookie,
   parseCookies,
   readSignedState,
@@ -76,11 +77,18 @@ export default async function handler(req, res) {
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: "magiclink",
-      email: loginEmail,
-      options: { redirectTo: `${appUrl()}/app?whop=connected` }
+      email: loginEmail
     });
-    if (linkError || !linkData?.user?.id || !linkData?.properties?.action_link) throw linkError || new Error("Could not create Hostrack session");
+    if (linkError || !linkData?.user?.id || !linkData?.properties?.hashed_token) {
+      throw linkError || new Error("Could not create Hostrack session");
+    }
     await ensureHostrackUserRows(linkData.user.id, { whopMembership: membership });
+
+    const { data: verified, error: verifyError } = await getSupabaseAuthClient().auth.verifyOtp({
+      token_hash: linkData.properties.hashed_token,
+      type: linkData.properties.verification_type || "magiclink"
+    });
+    if (verifyError || !verified.session) throw verifyError || new Error("Could not verify Hostrack session");
 
     if (tokens.refresh_token) {
       await fetch("https://api.whop.com/oauth/revoke", {
@@ -89,7 +97,16 @@ export default async function handler(req, res) {
         body: JSON.stringify({ token: tokens.refresh_token, client_id: requiredEnv("WHOP_OAUTH_CLIENT_ID") })
       }).catch(() => null);
     }
-    return redirect(res, linkData.properties.action_link);
+    const destination = new URL(`${appUrl()}/app`);
+    destination.searchParams.set("whop", "connected");
+    destination.hash = new URLSearchParams({
+      access_token: verified.session.access_token,
+      refresh_token: verified.session.refresh_token,
+      expires_in: String(verified.session.expires_in),
+      token_type: verified.session.token_type || "bearer",
+      type: "magiclink"
+    }).toString();
+    return redirect(res, destination.toString());
   } catch (error) {
     console.error("whop-oauth-callback failed", error?.message || error);
     return redirect(res, `${appUrl()}/app?whop=oauth_error`);

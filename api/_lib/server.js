@@ -32,6 +32,17 @@ export function getSupabaseAdmin() {
   });
 }
 
+export function getSupabaseAuthClient() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error("Missing Supabase public environment variables");
+  }
+  return createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+}
+
 export function whopPlanIds() {
   return {
     public: {
