@@ -253,10 +253,20 @@ function HostrackApplication() {
       email_unverified: ["Verify your Whop email before continuing", "warning"],
       oauth_error: ["Something went wrong", "error"]
     };
-    const [message, type] = messages[whopResult] || messages.oauth_error;
+    const reason = params.get("reason");
+    const reasonMessages = {
+      missing_whop_user_token: "Whop did not send the app login token",
+      no_membership_for_whop_user: "No active Hostrack membership was found",
+      missing_whop_membership_email: "Whop did not send an account email"
+    };
+    const [message, type] = reason && reasonMessages[reason]
+      ? [reasonMessages[reason], "error"]
+      : messages[whopResult] || messages.oauth_error;
+    if (reason && whopResult !== "connected") console.error("Whop connection failed:", reason);
     showToast(message, type);
     if (whopResult === "connected") subscription.refetch();
     params.delete("whop");
+    params.delete("reason");
     const query = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
   }, [showToast, subscription.refetch]);

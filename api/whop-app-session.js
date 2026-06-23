@@ -12,6 +12,10 @@ function redirect(res, location) {
   res.status(302).end();
 }
 
+function redirectFailure(res, reason) {
+  return redirect(res, `${appUrl()}/app?whop=oauth_error&reason=${encodeURIComponent(reason)}`);
+}
+
 async function createOrFindHostrackUser(supabase, email, whopUserId) {
   const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
     email,
@@ -39,12 +43,13 @@ export default async function handler(req, res) {
   try {
     const whop = getWhop();
     const token = req.headers["x-whop-user-token"];
+    if (!token) return redirectFailure(res, "missing_whop_user_token");
     const verifiedUser = await whop.verifyUserToken(typeof token === "string" ? token : null);
     const membership = await findWhopMembershipForUser(verifiedUser.userId);
-    if (!membership) return redirect(res, `${appUrl()}/app?whop=no_membership`);
+    if (!membership) return redirect(res, `${appUrl()}/app?whop=no_membership&reason=no_membership_for_whop_user`);
 
     let email = membership.user?.email;
-    if (!email) throw new Error("Whop membership email is unavailable");
+    if (!email) return redirectFailure(res, "missing_whop_membership_email");
 
     const supabase = getSupabaseAdmin();
     const { data: linkedEntitlement, error: linkedEntitlementError } = await supabase
@@ -90,6 +95,6 @@ export default async function handler(req, res) {
     return redirect(res, destination.toString());
   } catch (error) {
     console.error("whop-app-session failed", error?.message || error);
-    return redirect(res, `${appUrl()}/app?whop=oauth_error`);
+    return redirectFailure(res, error?.message || "app_session_failed");
   }
 }

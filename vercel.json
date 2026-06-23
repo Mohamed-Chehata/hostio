@@ -1,6 +1,16 @@
 {
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "query",
+          "key": "code"
+        }
+      ],
+      "destination": "/api/whop-app-session"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
