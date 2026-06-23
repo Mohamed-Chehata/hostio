@@ -9,7 +9,7 @@ import { ConnectionStatus } from "../components/ConnectionStatus";
 import { OfflineUnavailable } from "../components/OfflineUnavailable";
 import { LockedPropertyBanner } from "../components/SubscriptionFlows";
 import { monthLabel } from "../utils/monthUtils";
-import { InstallSteps } from "./LandingPage";
+import { InstallSteps } from "../components/InstallSteps";
 import { getDeviceType } from "../utils/device";
 
 const INSTALL_PROMPT_KEY = "hostrack-install-prompt-shown";

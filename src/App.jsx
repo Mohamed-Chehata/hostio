@@ -33,14 +33,13 @@ import { ImportBookingsScreen } from "./screens/ImportBookingsScreen";
 import { PaywallScreen } from "./screens/PaywallScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
-import { LandingPage } from "./screens/LandingPage";
 import { getDataError, getToastTypeForError } from "./utils/errorHandler";
 import { currentMonthKey, moveMonth } from "./utils/monthUtils";
 import { getDeviceType } from "./utils/device";
 
 const APP_BASE_PATH = "/app";
 const PUBLIC_URL = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/$/, "");
-const LANDING_URL = PUBLIC_URL.replace(/\/app$/, "");
+const APP_URL = `${PUBLIC_URL.replace(/\/app$/, "")}${APP_BASE_PATH}`;
 const tabOrder = { dashboard: 0, bookings: 1, add: 2, expenses: 3, stats: 4, settings: 5, "import-bookings": 6, "all-properties": 7 };
 const tabScreens = new Set(Object.keys(tabOrder));
 const transientScreens = new Set(["import-bookings"]);
@@ -97,10 +96,9 @@ export default function App() {
       window.location.replace(`/api/whop-app-session${window.location.search}`);
       return null;
     }
-    return <LandingPage onGetStarted={() => {
-      window.history.pushState({}, "", APP_BASE_PATH);
-      window.dispatchEvent(new Event("hostrack:route-changed"));
-    }} />;
+    window.history.replaceState({}, "", APP_BASE_PATH);
+    window.dispatchEvent(new Event("hostrack:route-changed"));
+    return null;
   }
 
   if (deviceType === "desktop") return <MobileOnlyScreen />;
@@ -1173,7 +1171,7 @@ function AppLoadingScreen() {
 }
 
 function MobileOnlyScreen() {
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(LANDING_URL)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(APP_URL)}`;
 
   return (
     <main className="mx-auto grid min-h-screen max-w-[390px] place-items-center bg-app px-6 text-center text-white">
@@ -1186,7 +1184,7 @@ function MobileOnlyScreen() {
         <div className="mx-auto mt-7 w-fit rounded-2xl bg-[#FFFFFF] p-3">
           <img src={qrUrl} alt="QR code to open Hostrack" className="h-[200px] w-[200px]" />
         </div>
-        <p className="mt-5 text-xs font-bold text-muted">{LANDING_URL.replace(/^https?:\/\//, "")}</p>
+        <p className="mt-5 text-xs font-bold text-muted">{APP_URL.replace(/^https?:\/\//, "")}</p>
       </motion.div>
     </main>
   );
