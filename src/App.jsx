@@ -288,14 +288,34 @@ function HostrackApplication() {
   useEffect(() => {
     let cancelled = false;
 
-    async function handleRecoveryHash() {
+    async function handleAuthHash() {
       const hash = window.location.hash;
-      if (!hash || !hash.includes("type=recovery")) return;
-
-      setRecoveryMode(true);
       const params = new URLSearchParams(hash.substring(1));
       const accessToken = params.get("access_token");
       const refreshToken = params.get("refresh_token");
+      if (!hash || !accessToken || !refreshToken) return;
+
+      if (!hash.includes("type=recovery")) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (cancelled) return;
+        if (error) {
+          showToast("Something went wrong", "error");
+          window.history.replaceState({}, "", APP_BASE_PATH);
+          return;
+        }
+
+        sessionStorage.setItem("activeTab", "dashboard");
+        sessionStorage.removeItem("statsPageIndex");
+        window.history.replaceState({}, "", APP_BASE_PATH);
+        window.dispatchEvent(new Event("hostrack:route-changed"));
+        return;
+      }
+
+      setRecoveryMode(true);
 
       if (!accessToken || !refreshToken) {
         window.history.replaceState({}, "", APP_BASE_PATH);
@@ -320,11 +340,11 @@ function HostrackApplication() {
       window.dispatchEvent(new CustomEvent("hostrack:password-recovery"));
     }
 
-    handleRecoveryHash();
+    handleAuthHash();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (screen === "stats") data.fetchStatsMonths();

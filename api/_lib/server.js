@@ -284,7 +284,7 @@ export async function requireUser(req) {
 }
 
 export function appUrl() {
-  return (process.env.VITE_APP_URL || "https://hostrack.app").replace(/\/$/, "");
+  return (process.env.VITE_APP_URL || "https://www.hostrack.app").replace(/\/$/, "");
 }
 
 export function sendJson(res, status, body) {
