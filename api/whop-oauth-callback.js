@@ -64,17 +64,41 @@ export default async function handler(req, res) {
     if (linkedEntitlementError) throw linkedEntitlementError;
 
     let loginEmail = whopUser.email;
+    let targetUserId = null;
     const hostrackUserId = stored.userId || linkedEntitlement?.hostrack_user_id;
     if (hostrackUserId) {
       const { data: linkedUser, error: linkedUserError } = await supabase.auth.admin.getUserById(hostrackUserId);
       if (linkedUserError || !linkedUser?.user?.email) throw linkedUserError || new Error("Linked Hostrack user is unavailable");
       loginEmail = linkedUser.user.email;
+      targetUserId = linkedUser.user.id;
+    } else {
+      const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
+        email: loginEmail,
+        email_confirm: true,
+        user_metadata: {
+          provider: "whop",
+          whop_user_id: whopUser.sub
+        }
+      });
+      if (createUserError && !String(createUserError.message || "").toLowerCase().includes("already")) {
+        throw createUserError;
+      }
+      targetUserId = createdUser?.user?.id || null;
     }
 
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+    let { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: "magiclink",
       email: loginEmail
     });
+    if (linkError && targetUserId) {
+      const { data: linkedUser, error: linkedUserError } = await supabase.auth.admin.getUserById(targetUserId);
+      if (linkedUserError || !linkedUser?.user?.email) throw linkError;
+      loginEmail = linkedUser.user.email;
+      ({ data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+        type: "magiclink",
+        email: loginEmail
+      }));
+    }
     if (linkError || !linkData?.user?.id || !linkData?.properties?.hashed_token) {
       throw linkError || new Error("Could not create Hostrack session");
     }
