@@ -9,6 +9,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      if (window.location.pathname.startsWith("/api/") && "serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+          .finally(() => window.location.reload());
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
