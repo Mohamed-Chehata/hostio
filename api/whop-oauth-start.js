@@ -5,7 +5,6 @@ import {
   handleOptions,
   oauthCookie,
   requiredEnv,
-  requireUser,
   sendJson
 } from "./_lib/server.js";
 
@@ -21,7 +20,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const user = await requireUser(req);
     const state = randomValue(20);
     const nonce = randomValue(20);
     const codeVerifier = randomValue(48);
@@ -31,7 +29,7 @@ export default async function handler(req, res) {
       state,
       nonce,
       codeVerifier,
-      userId: user?.id || null,
+      userId: null,
       expiresAt: Date.now() + 10 * 60 * 1000
     });
 

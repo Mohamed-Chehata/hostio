@@ -991,7 +991,9 @@ function HostrackApplication() {
     />
   );
 
-  const content = authAction ? (
+  const content = authAction === "whop" ? (
+    <AppLoadingScreen />
+  ) : authAction ? (
     authScreen
   ) : checkoutStatus && auth.session ? (
     <CheckoutStatusScreen
