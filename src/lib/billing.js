@@ -49,7 +49,7 @@ export async function openBillingPortal() {
 
 export async function connectWhopAccount({ linkCurrentUser = false } = {}) {
   const { url } = await billingRequest("/api/whop-oauth-start", {}, { auth: linkCurrentUser });
-  window.location.href = url;
+  window.open(url, "_blank", "noopener");
 }
 
 export async function reconcileWhopCheckout() {
