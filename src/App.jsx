@@ -48,14 +48,6 @@ function appPath(path = "") {
   return `${APP_BASE_PATH}${path}`;
 }
 
-function isInsideIframe() {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
-}
-
 function hasSeenSplashBefore() {
   const launched = localStorage.getItem("hostrack-app-launched") === "true";
   const sessionSeen = sessionStorage.getItem("splashShown") === "true";
@@ -100,11 +92,6 @@ export default function App() {
 
   if (routePath === "/reset-password") return null;
   if (!routePath.startsWith(APP_BASE_PATH)) {
-    if (new URLSearchParams(window.location.search).has("code")) {
-      window.history.replaceState({}, "", `${APP_BASE_PATH}?source=whop&launch=1`);
-      window.dispatchEvent(new Event("hostrack:route-changed"));
-      return null;
-    }
     window.history.replaceState({}, "", APP_BASE_PATH);
     window.dispatchEvent(new Event("hostrack:route-changed"));
     return null;
@@ -172,7 +159,6 @@ function HostrackApplication() {
   const exitBackPressedAt = useRef(0);
   const backGuardReady = useRef(false);
   const allowNextBrowserBack = useRef(false);
-  const whopLaunchStarted = useRef(false);
   const blankMonthStats = (month) => ({ month, rent: 0, cleaning: 0, randomExpenses: [], expenses: 0, totalRevenue: 0, unpaidRevenue: 0, pendingPayouts: [], occupancyNights: 0, occupancyRate: 0, netRevenue: 0 });
   const currentStats = data.monthlyStats.find((item) => item.month === dashboardMonth) || blankMonthStats(dashboardMonth);
   const expensesStats = data.monthlyStats.find((item) => item.month === expensesMonth) || blankMonthStats(expensesMonth);
@@ -558,49 +544,6 @@ function HostrackApplication() {
     if (!subscription.error) return;
     showToast("Something went wrong", "error");
   }, [showToast, subscription.error]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const isWhopLaunch = params.get("source") === "whop" && params.get("launch") === "1";
-    const isWhopIframe = isInsideIframe();
-    if ((!isWhopLaunch && !isWhopIframe) || whopLaunchStarted.current || auth.isAuthLoading || auth.session) return;
-
-    whopLaunchStarted.current = true;
-    params.delete("launch");
-    params.delete("source");
-    const query = params.toString();
-    window.history.replaceState({}, "", `${APP_BASE_PATH}${query ? `?${query}` : ""}`);
-    setAuthAction("whop");
-
-    if (isWhopIframe) {
-      fetch("/api/whop-iframe-login", { method: "POST", credentials: "include" })
-        .then(async (response) => {
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok || result.error || !result.access_token || !result.refresh_token) {
-            throw new Error(result.error || "whop_iframe_login_failed");
-          }
-          const { error } = await supabase.auth.setSession({
-            access_token: result.access_token,
-            refresh_token: result.refresh_token
-          });
-          if (error) throw error;
-          sessionStorage.setItem("activeTab", "dashboard");
-          sessionStorage.removeItem("statsPageIndex");
-          window.dispatchEvent(new Event("hostrack:route-changed"));
-        })
-        .catch((error) => {
-          console.error("Whop iframe login failed:", error?.message || error);
-          showToast("Whop login failed. Try opening Hostrack directly.", "error");
-        })
-        .finally(() => setAuthAction(null));
-      return;
-    }
-
-    connectWhopAccount({ linkCurrentUser: false }).catch(() => {
-      setAuthAction(null);
-      showToast("Something went wrong", "error");
-    });
-  }, [auth.isAuthLoading, auth.session, showToast]);
 
   useEffect(() => {
     if (authAction !== "login") return;
