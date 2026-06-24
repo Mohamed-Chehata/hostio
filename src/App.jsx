@@ -48,6 +48,14 @@ function appPath(path = "") {
   return `${APP_BASE_PATH}${path}`;
 }
 
+function isInsideIframe() {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
 function hasSeenSplashBefore() {
   const launched = localStorage.getItem("hostrack-app-launched") === "true";
   const sessionSeen = sessionStorage.getItem("splashShown") === "true";
@@ -554,13 +562,40 @@ function HostrackApplication() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const isWhopLaunch = params.get("source") === "whop" && params.get("launch") === "1";
-    if (!isWhopLaunch || whopLaunchStarted.current || auth.isAuthLoading || auth.session) return;
+    const isWhopIframe = isInsideIframe();
+    if ((!isWhopLaunch && !isWhopIframe) || whopLaunchStarted.current || auth.isAuthLoading || auth.session) return;
 
     whopLaunchStarted.current = true;
     params.delete("launch");
+    params.delete("source");
     const query = params.toString();
     window.history.replaceState({}, "", `${APP_BASE_PATH}${query ? `?${query}` : ""}`);
     setAuthAction("whop");
+
+    if (isWhopIframe) {
+      fetch("/api/whop-iframe-login", { method: "POST", credentials: "include" })
+        .then(async (response) => {
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.error || !result.access_token || !result.refresh_token) {
+            throw new Error(result.error || "whop_iframe_login_failed");
+          }
+          const { error } = await supabase.auth.setSession({
+            access_token: result.access_token,
+            refresh_token: result.refresh_token
+          });
+          if (error) throw error;
+          sessionStorage.setItem("activeTab", "dashboard");
+          sessionStorage.removeItem("statsPageIndex");
+          window.dispatchEvent(new Event("hostrack:route-changed"));
+        })
+        .catch((error) => {
+          console.error("Whop iframe login failed:", error?.message || error);
+          showToast("Whop login failed. Try opening Hostrack directly.", "error");
+        })
+        .finally(() => setAuthAction(null));
+      return;
+    }
+
     connectWhopAccount({ linkCurrentUser: false }).catch(() => {
       setAuthAction(null);
       showToast("Something went wrong", "error");
